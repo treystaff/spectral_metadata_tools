@@ -1,5 +1,5 @@
 """
-Working draft of functions for splitting CALMIT CDAP datafiles into data, metadata, and auxiliary files. 
+Working draft of functions for splitting CALMIT CDAP datafiles into data, metadata, and auxiliary files.
 """
 
 import simplekml
@@ -118,7 +118,7 @@ def findScanIdx(fields):
             if field.startswith('DC'):
                 return idx
 
-def splitdata(path,filename,year,outpath):
+def splitdata(path, filename, year, outpath, vertical=True):
     """
     Split a CDAP datafile into cal, meta, aux, and data files by location.
 
@@ -127,6 +127,11 @@ def splitdata(path,filename,year,outpath):
         filename - Name of cdap data file
         year - year of cdap data file
         outpath - base path into which split files will be placed.
+        vertical - Optional. Default = True. Determines if data should be oriented vertically
+            (legacy CDAP - one observation per column instead of by row)
+
+    Returns:
+        A split CDAP datafile, placed in outpath according to a location-based directory structure.
     """
 
     data = readData(path + '/' + filename)
@@ -195,17 +200,25 @@ def splitdata(path,filename,year,outpath):
                 prepIdxs = [i for i, val1, val2 in zip(range(1, len(reps)+1), reps, projects)
                             if val1 == prep and val2 == project]
 
-                for idx in prepIdxs:
-                    prepData.append(zdata[idx])
-
-                pdb.set_trace()
+                if vertical:
+                    for i, row in enumerate(data):
+                        prepData.append([row[0]])  # Add the vertical header info.
+                        for idx in prepIdxs:
+                            prepData[i].append(row[idx])
+                else:
+                    for idx in prepIdxs:
+                        prepData.append(zdata[idx])
 
                 # Save the data to the correct locations
-                # location/project directory
 
+                # location/project directory
                 projectDir = outpath + str(year) + '/' + location + '/' + project + '/' + prep_dates[0] + '/'
+
                 if not os.path.exists(projectDir):
                     os.makedirs(projectDir)
+
+                # Keep a log of what datafiles are being used to create newfiles.
+                log = open(projectDir + 'log.txt', 'a')
 
                 # Check if cal file
                 if 'cal' in prep.lower():
@@ -223,43 +236,69 @@ def splitdata(path,filename,year,outpath):
 
                 try:
                     if not os.path.isfile(auxfile):
-                        # Create a new file w/ header at top
+                        # Create a new file
                         f = open(auxfile, 'w+')
                         write = csv.writer(f, delimiter=',')
-                        write.writerow(fields[0:scanIdx])
+
+                        # Write headerline if not vertical orientation.
+                        if not vertical:
+                            write.writerow(fields[0:scanIdx])
 
                     else:
+                        # Should not be appending (maybe change later?)
+                        raise IOError('File ' + auxfile + ' already exists! Trying to create from '
+                                      + path + '/' + filename)
+                        '''
                         # Just append results to file
                         f = open(auxfile, 'a')
                         write = csv.writer(f, delimiter=',')
-
+                        '''
                     # Now write the results to the file.
-                    for pdata in prepData:
-                        write.writerow(pdata[0:scanIdx])
+                    if vertical:
+                        for idx in range(0, scanIdx):
+                            write.writerow(prepData[idx])
+                    else:
+                        for pdata in prepData:
+                            write.writerow(pdata[0:scanIdx])
+
+                    # Log that this occured.
+                    log.write(auxfile[len(projectDir):] + ' created from ' + path + '/' + filename + '\n')
 
                 except:
                     raise
                 finally:
                     f.close()
-                    del f
 
                 # Save the scan data file.
                 scanfile = projectDir + filename[0:-4] + cal + 'SCANS' + '.csv'
                 try:
                     if not os.path.isfile(scanfile):
-                        # Create a new file w/ header at top
+                        # Create a new file
                         f = open(scanfile, 'w+')
                         write = csv.writer(f, delimiter=',')
-                        write.writerow(fields[scanIdx:])
+                        # Write headerline if not vertical orientation.
+                        if not vertical:
+                            write.writerow(fields[scanIdx:])
 
                     else:
+                        # Should not be appending (maybe change later?)
+                        raise IOError('File ' + scanfile + ' already exists! Trying to create from '
+                            + path + '/' + filename)
+                        '''
                         # Just append results to file
                         f = open(scanfile, 'a')
                         write = csv.writer(f, delimiter=',')
-
+                        '''
                     # Now write the results to the file.
-                    for pdata in prepData:
-                        write.writerow(pdata[scanIdx:])
+                    if vertical:
+                        for idx in range(scanIdx, len(prepData)):
+                            write.writerow(prepData[idx])
+                    else:
+                        for pdata in prepData:
+                            write.writerow(pdata[scanIdx:])
+
+                    # Log that this occured.
+                    log.write(scanfile[len(projectDir):] + ' created from ' + path + '/' + filename + '\n')
 
                 except:
                     raise
