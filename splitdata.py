@@ -7,6 +7,7 @@ import os
 import csv
 import traceback
 import re
+import pdb  # FOR DEBUGGING ONLY
 
 def readData(filepath):
     """
@@ -140,6 +141,7 @@ def splitdata(path, filename, year, outpath, vertical=True):
     # Check if the data is CDAP 2
     if not data[0][0].startswith('PROCESSED'):
         # Not CDAP 2
+
         fields = getFields(data)
 
         # Pull out some necessary data
@@ -152,6 +154,9 @@ def splitdata(path, filename, year, outpath, vertical=True):
 
         # Find the field position where scan data begins:
         scanIdx = findScanIdx(fields)
+
+        # We will keep a dictionary of direcotires created and their projects/reps:
+        dir_dict = {}
 
         # Split each file into unique projects.
         distinct_projects = list(set(projects))
@@ -248,11 +253,7 @@ def splitdata(path, filename, year, outpath, vertical=True):
                         # Should not be appending (maybe change later?)
                         raise IOError('File ' + auxfile + ' already exists! Trying to create from '
                                       + path + '/' + filename)
-                        '''
-                        # Just append results to file
-                        f = open(auxfile, 'a')
-                        write = csv.writer(f, delimiter=',')
-                        '''
+
                     # Now write the results to the file.
                     if vertical:
                         for idx in range(0, scanIdx):
@@ -305,9 +306,140 @@ def splitdata(path, filename, year, outpath, vertical=True):
                 finally:
                     f.close()
 
+                # Should be a new dir for every prep.
+                dir_dict[projectDir] = {'date': prep_dates[0], 'project': project, 'reps': distinct_preps}
+
+        return dir_dict
+
     else:
         # CDAP2
         pass
+
+def create_files_manifest(dirpath, splitpaths):
+    """
+    Function for finding other files in directory containing data and creating a manifest of them.
+    """
+    # Walk through the current directory
+    for root, dirs, files in os.walk(dirpath):
+        # Check if there are any images in the current dir.
+        images = [file for file in files if file.lower().endswith(('.jpg', '.png', '.tif'))]
+
+        # Get a list of any of the raw data files
+        raw_files = [file for file in files if file.lower().endswith(('.downwelling', '.upwelling', '.calibration', '.aux'))]
+
+        # Get list of any logfiles.
+        logs = [file for file in files if file.lower().endswith('log.txt')]
+
+        # Get list of veg fraction files
+        vegfrac_files = [file for file in files if file.lower().endswith('vegfraction.txt')]
+
+        # Get all other files
+        otherfiles = list(set(files) - set(images) - set(raw_files) - set(logs))
+
+        # Open the log file(s) and record their data.
+        log_data = []
+        if len(logs) > 1:
+            raise ValueError('THERE SHOULD ONLY BE ONE LOG FILE? MORE THAN ONE FOUND: ' + root)
+        elif len(logs) == 1:
+            log_data = readData(root + '/' + logs[0])  # Only look at the first log for now (should only be one).
+            # Get and remove the log header from the logfile.
+            log_header = log_data[1]
+            log_data = log_data[2:]  # First two rows are headerlines, remove them.
+
+
+        #Open the vegfraction file(s) and record their data.
+        vegfrac_data = []
+        if len(vegfrac_files) > 1:
+            raise ValueError('THERE SHOULD ONLY BE ONE VEGFRACTION FILE? MORE THAN ONE FOUND: ' + root)
+        elif len(vegfrac_files) == 1:
+            vegfrac_data = readData(root + '/' + vegfrac_files[0])
+            # Extract header
+            vegfrac_header = vegfrac_data[0]
+            # Remove header from data.
+            vegfrac_data = vegfrac_header[1:]
+
+        # Now split by directory and write results to manifest
+        for dir in splitpaths.keys():
+            # Extract the necessary information.
+            project = splitpaths[dir]['project']
+            date = splitpaths[dir]['date']
+            reps = splitpaths[dir]['reps']
+
+            # Make sure to grab every rep
+            prep_images = []
+            prep_rawfiles = []
+            prep_logdata = []
+            prep_vegfracdata = []
+            for rep in reps:
+                # Create a regex for finding files that match project/rep (prep)
+                pattern = '{0}_{1}_{2}_*'.format(project, date, rep)
+                pattern = re.compile(pattern)
+
+                # Get the list of images that match the project/rep
+                prep_images.extend([file for file in images if pattern.match(file.lower())])
+
+                # Get the list of raw files that match the project/rep.
+                prep_rawfiles.extend([file for file in raw_files if pattern.match(file.lower())])
+
+                # Extract log matching project/rep
+                if log_data:
+                    prep_logdata.extend([row for row in log_data
+                                         if row[1].lower() == project and row[2].lower() == rep])
+
+                # Extract the vegfraction rows matching the prep_images found above.
+                if vegfrac_data:
+                    prep_vegfracdata.extend([row for row in vegfrac_data if row[0] in prep_images])
+
+            # Create the directory if it doesn't yet exist:
+            subdir = root[len(dirpath):]
+
+            if subdir:
+                savedir = dir + root[len(dirpath) + 1:] + '/'
+            else:
+                savedir = dir
+
+
+            if date == '20050906' and project == 'csp02':
+                pdb.set_trace()
+            
+
+            if not os.path.exists(savedir):
+                os.makedirs(savedir)
+
+            # Write the image manifest
+            if prep_images:
+                with open(savedir + 'images_log.txt', 'a') as imgfile:
+                    for image in prep_images:
+                        imgfile.write(image + '\n')
+
+            # Write the raw files manifest
+            if prep_rawfiles:
+                with open(savedir +'raw_datafiles_log.txt','a') as rawfile:
+                    for raw in prep_rawfiles:
+                        rawfile.write(raw + '\n')
+
+            # Write the other files manifest (include rootdir for back-tracing ?)
+            if otherfiles:
+                with open(savedir + 'other_files_log.txt', 'a') as otherfile:
+                    for other in otherfiles:
+                        otherfile.write(other + '\n')
+
+            # Write the new logfile
+            if log_data:
+                # Now write the new log
+                with open(savedir + logs[0][:-3] + '.csv', 'a') as logfile:
+                    writer = csv.writer(logfile, delimiter=',')
+                    writer.writerow(log_header)
+                    for row in prep_logdata:
+                        writer.writerow(row)
+
+            # Write the new vegfraction file
+            if vegfrac_data:
+                with open(savedir + vegfrac_files[0][:-3] + '.csv', 'a') as vegfile:
+                    writer = csv.writer(vegfile, delimiter = ',')
+                    writer.writerow(vegfrac_header)
+                    for row in prep_vegfracdata:
+                        writer.writerow(row)
 
 def processYear(year, outpath):
     """Process a year's worth of data files"""
@@ -319,12 +451,14 @@ def processYear(year, outpath):
 
     for root, dirs, files in os.walk('/media/sf_Field-Data/' + str(year)):
         # If files contains one or more supported types, get
+        dirs = {}
         if '/'+str(year)+'/'+str(year) + '/' not in root and ('csp' in root.lower() or 'mead' in root.lower() or 'BLMV' in root):
+            getOtherFiles = False  # Flag for logging presence of other files (only happens if a match happens below).
+
             upwelling = [file for file in files if upPattern.match(file)]
             for up in upwelling:
                 try:
-
-                    splitdata(root,up,year,outpath)
+                    dirs = splitdata(root,up,year,outpath)
 
                 except Exception as e:
                     print(root + up + ' Failed processing: \n')
@@ -333,7 +467,8 @@ def processYear(year, outpath):
             downwelling = [file for file in files if downPattern.match(file)]
             for down in downwelling:
                 try:
-                    splitdata(root,down,year,outpath)
+                    dirs = splitdata(root,down,year,outpath)
+
                 except Exception as e:
                     print(root + down + ' Failed processing: \n')
                     traceback.print_exc()
@@ -341,7 +476,8 @@ def processYear(year, outpath):
             outgoing = [file for file in files if outPattern.match(file)]
             for out in outgoing:
                 try:
-                    splitdata(root,out,year,outpath)
+                    dirs = splitdata(root,out,year,outpath)
+
                 except Exception as e:
                     print(root + out + ' Failed processing: \n')
                     traceback.print_exc()
@@ -349,9 +485,13 @@ def processYear(year, outpath):
             reflect = [file for file in files if refPattern.match(file)]
             for ref in reflect:
                 try:
-                    splitdata(root,ref,year,outpath)
+                    dirs = splitdata(root,ref,year,outpath)
                 except Exception as e:
                     print(root + ref + ' Failed processing: \n')
                     traceback.print_exc()
+
+            if dirs:
+                # Get a listing of all other files/subdirs and include a manifest in outpath.
+                create_files_manifest(root, dirs)
 
     print str(year) + ' PROCESSED'
