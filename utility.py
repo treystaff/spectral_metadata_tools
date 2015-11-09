@@ -1,10 +1,37 @@
-'''Support functions'''
+"""Support functions"""
 
 from matplotlib import pyplot as plt
 from matplotlib import rcParams
 import csv
 import simplekml
 import os
+
+
+def filter_floats(l, convert=True, remove_val=-9999):
+    """
+    Given a list, returns a list of elements that can be converted to floats.
+
+    Parameters:
+        l - List. List to filter.
+        convert=True - Returned list has elements that can be converted to floats as floats, otherwise remains as was
+            (e.g., str, int)
+        remove_val=-9999 - Optionally remove value from list. Defaults to removing nodata value.
+
+    Returns:
+        filtered - List of filtered list elements.
+    """
+    filtered = []
+    for element in l:
+        try:
+            converted = float(element)
+            if convert and converted != remove_val:
+                filtered.append(converted)
+            elif converted != remove_val:
+                filtered.append(element)
+        except ValueError:
+            pass
+
+    return filtered
 
 
 def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, key_dict, type, out_dir):
@@ -85,6 +112,7 @@ def standardize_project_name(data_dict, key_dict):
 
     return data_dict
 
+
 def split_by_idxs(data, idxs):
     """
     Splits a CDAP data list by a list of indexes.
@@ -137,59 +165,6 @@ def split_cal_scans(data, cal_idxs):
     return cal_data, scan_data
 
 
-def create_metadata_file(metadata, path):
-    """Creates a metadata file"""
-    elements = ['Dataset ID', 'Project', 'Date', 'Upwelling Instrument Name', 'Upwelling Instrument Serial Number',
-                'Upwelling Instrument FOV', 'Downwelling Instrument Name', 'Downwelling Instrument Serial Number',
-                'Downwelling Instrument FOV', 'Calibration Panel', 'Calibration Mode', 'Location', 'Country', 'State', 'County', 'Target',
-                'Acquisition Software', 'Software Version', 'Start Time', 'Stop Time', 'Min Solar Elevation', 'Max Solar Elevation',
-                'Min Solar Azimuth', 'Max Solar Azimuth', 'Min Solar Zenith', 'Max Solar Zenith', 'Min Latitude',
-                'Max Latitude', 'Min Longitude', 'Max Longitude', 'Illumination Source', 'Legacy Path']
-
-    with open(path, 'w') as f:
-        write = csv.writer(f, delimiter=',')
-        for element in elements:
-            if element in metadata.keys():
-                if element == 'Target':
-                    row = [element]
-                    row.extend(metadata[element])
-                    write.writerow(row)
-                else:
-                    write.writerow([element, metadata[element]])
-
-
-def create_aux_file(data_dict, key_dict, other_keys, dataset_id, path):
-    """
-    Creates an aux file for a dataset.
-    """
-    # Define what to include in Aux.
-    elements = ['Project', 'Replication', 'X', 'Y', 'Scan Number', 'Solar Azimuth', 'Solar Elevation', 'Solar Zenith',
-                'GPS', 'Altitude', 'Latitude', 'Longitude', 'Battery Voltage', 'Canopy Temperature', 'Temperature 1',
-                'Temperature 2', 'Pyronometer', 'Quantum Sensor']
-
-    # Open the csv file and write the results
-    with open(path, 'w') as f:
-        write = csv.writer(f, delimiter=',')
-
-        # First write the dataset ID
-        write.writerow(['Dataset ID', dataset_id])
-
-        # Now add the other rows
-        for element in elements:
-            if element in key_dict.keys():
-                row = [element]
-                row.extend(data_dict[key_dict[element]])
-                write.writerow(row)
-
-        # Add other found keys.
-        if other_keys:
-            for other_key in other_keys:
-                if data_dict[other_key]:
-                    row = [other_key]
-                    row.extend(data_dict[other_key])
-                    write.writerow(row)
-
-
 def create_scan_file(data_dict, key_dict, scan_data, dataset_id, path):
     """
     Creates a scan data file for a dataset.
@@ -213,108 +188,6 @@ def create_scan_file(data_dict, key_dict, scan_data, dataset_id, path):
         # Now add the scandata
         for row in scan_data:
             write.writerow(row)
-
-
-def split_datalogger_entry(datalogger_str):
-    """
-    Splits a datalogger entry into its constituent parts.
-
-    Parameters:
-        datalogger_str - String. A datalogger entry
-
-    Returns:
-        split_entries - A list of individual datalogger values
-    """
-    return [s[3:] for s in datalogger_str.split(',')]
-
-
-def split_datalogger_entries(datalogger_strs):
-    """
-    Splits a list of datalogger entries into their constituent parts.
-    Covinience function for splitting many datalogger entries.
-
-    Parameters:
-        datalogger_strs - List of strings.
-
-    Returns:
-        split_entries - A list of lists containing datalogger values.
-    """
-    # TODO: maybe just remove split_datalogger_entry and replace with this.
-
-    return map(split_datalogger_entry, datalogger_strs)
-
-
-def datalogger_to_dict(cal_dict, data_dict, key_dict):
-    """
-    Removes the datalogger entry from cal and data dicts, replacing with new fields for each logged value.
-
-    Parameters:
-        cal_dict - Dictionary of CALMIT calibration data
-        data_dict - Dicitonary of CALMIT scandata (not cal)
-        key_dict - A key dictionary created via create_key_dict()
-
-    Returns:
-        cal_dict, data_dict, key_dict - Modified dictionaries.
-    """
-    data_datalogger = data_dict[key_dict['Data Logger']]
-    cal_datalogger = cal_dict[key_dict['Data Logger']]
-    num_entries = len(split_datalogger_entry(data_datalogger[0]))
-    # Determine the structure of the datalogger entries
-    if num_entries == 5:
-        entry_names = ['Battery Voltage', 'Temperature 1', 'Temperature 2', 'Pyronometer', 'Quantum Sensor']
-    elif num_entries == 4:
-        entry_names = ['Battery Voltage', 'Temperature 1', 'Temperature 2', 'Pyronometer']
-    elif num_entries == 3:
-        entry_names = ['Battery Voltage', 'Temperature 1', 'Temperature 2']
-    else:
-        # TODO Implement other datalogger types
-        raise NotImplementedError('Unrecognized Datalogger string. Sorry!')
-
-    # Create an entry in the data and cal dicts for the split datalogger data.
-    for name in entry_names:
-        key_dict[name] = name  # Add this to the key dict, for consistency (other functs rely on it).
-        data_dict[name] = []
-        cal_dict[name] = []
-
-    # Add the data to the data dict
-    data_entries = zip(*split_datalogger_entries(data_datalogger))
-    for name, values in zip(entry_names,data_entries):
-        # Check for a list of nodata.
-        unique_vals = set(values)
-        # Datalogger should not have negative values.
-        if all(float(val) < 0 for val in unique_vals):
-            # Don't add to the data_dict.
-            pass
-        else:
-            data_dict[name] = []
-            for value in values:
-                # We assume DL values less than 0 are bad/nodata values.
-                if float(value) < 0:
-                    # TODO standardize nodata value. For now, use -9999
-                    data_dict[name].append('-9999')
-                else:
-                    data_dict[name].append(value)
-
-    # Add data to the cal dict
-    cal_entries = split_datalogger_entries(cal_datalogger)
-    for name, values in zip(entry_names, zip(*cal_entries)):
-        # Check for a list of nodata.
-        unique_vals = set(values)
-        if all(float(val) < 0 for val in unique_vals):
-            # Don't add to the cal_dict.
-            pass
-        else:
-            cal_dict[name] = []
-            for value in values:
-                # We assume DL values less than 0 are bad/nodata values.
-                if float(value) < 0:
-                    # TODO standardize nodata value. For now, use -9999
-                    cal_dict[name].append('-9999')
-                else:
-                    cal_dict[name].append(value)
-
-    del cal_dict[key_dict['Data Logger']], data_dict[key_dict['Data Logger']]
-    return cal_dict, data_dict
 
 
 def get_instrument_info(instrument_str):
@@ -354,7 +227,7 @@ def get_instrument_info(instrument_str):
 
     elif 'Spectron' in instrument_str:
         insrument_loc = instrument_str.find('Spectron')
-        instrument_name = instrument_str[:instr_idx + 8]
+        instrument_name = instrument_str[:insrument_loc + 8]
         # Check that the FOV is included.
         fov_loc = instrument_str.find('Degree')
         fov = instrument_str[fov_loc-4:fov_loc-1]
@@ -366,104 +239,6 @@ def get_instrument_info(instrument_str):
         raise NotImplementedError('NEED TO INCLUDE SUPPORT FOR UNSUPPORTED INSTRUMENT.')
 
     return instrument_name, snumber, fov
-
-
-def create_metadata_dict(cal_dict, data_dict, key_dict, data_dir):
-    """
-    Constructs the metadata dictionary from a calibration data and scandata dictionaries
-
-    Parameters:
-        cal_dict - Dictionary of CALMIT calibration data
-        data_dict - Dicitonary of CALMIT scandata (not cal)
-        key_dict - A key dictionary created via create_key_dict()
-        data_dir - String. Path to data directory
-
-    Returns:
-        meta_dict - A dictionary
-    """
-    meta_dict = dict()
-    #   Get the project name
-    project = data_dict[key_dict['Project']][0]
-
-    meta_dict['Project'] = project
-    #   Date
-    date = data_dict[key_dict['Date']][0]
-    meta_dict['Date'] = date
-    #   Construct the datasetID
-    start_times = []
-    start_times.extend(data_dict[key_dict['Start Time']])
-    start_times.extend(cal_dict[key_dict['Start Time']])
-    start_times.sort()
-    min_start_time = start_times[0]
-    dataset_id = '{0}_{1}_{2}'.format(project, date, min_start_time)
-    meta_dict['Dataset ID'] = dataset_id
-    #   Starttime
-    meta_dict['Start Time'] = min_start_time
-    #   Stoptime
-    stop_times = []
-    stop_times.extend(data_dict[key_dict['Stop Time']])
-    stop_times.extend(cal_dict[key_dict['Stop Time']])
-    stop_times.sort()
-    meta_dict['Stop Time'] = stop_times[-1]
-
-    #   Upwelling instrument
-    instrument_str = data_dict[key_dict['Instrument']][0]
-    instrument_name, snumber, fov = get_instrument_info(instrument_str)
-    meta_dict['Upwelling Instrument Name'] = instrument_name
-    meta_dict['Upwelling Instrument Serial Number'] = snumber
-    meta_dict['Upwelling Instrument FOV'] = fov
-
-    #   Cal panel
-    meta_dict['Calibration Panel'] = data_dict[key_dict['Calibration Panel']][0]
-    #   Software
-    meta_dict['Software Version'] = data_dict[key_dict['Acquisition Software']][0]
-    #   Target information
-    meta_dict['Target'] = reps_to_targets(data_dict[key_dict['Replication']])
-    #   Legacy Path
-    meta_dict['Legacy Path'] = data_dir
-    #   Calibration Mdoe
-
-    if key_dict['Calibration Mode']:
-        meta_dict['Calibration Mode'] = data_dict[key_dict['Calibration Mode']][0]
-
-    #   Min and Max solar zenith
-    zeniths = []
-    zeniths.extend(data_dict[key_dict['Solar Zenith']])
-    zeniths.extend(cal_dict[key_dict['Solar Zenith']])
-    zeniths.sort()
-    meta_dict['Min Solar Zenith'] = zeniths[0]
-    meta_dict['Max Solar Zenith'] = zeniths[-1]
-    #   Min and Max solar Elevatoin
-    elevs = []
-    elevs.extend(data_dict[key_dict['Solar Elevation']])
-    elevs.extend(cal_dict[key_dict['Solar Elevation']])
-    elevs.sort()
-    meta_dict['Min Solar Elevation'] = elevs[0]
-    meta_dict['Max Solar Elevation'] = elevs[-1]
-    #   Min & max solar azimuth
-    azimuths = []
-    azimuths.extend(data_dict[key_dict['Solar Azimuth']])
-    azimuths.extend(cal_dict[key_dict['Solar Azimuth']])
-    azimuths.sort()
-    meta_dict['Min Solar Azimuth'] = azimuths[0]
-    meta_dict['Max Solar Azimuth'] = azimuths[-1]
-    #   Min and Max lat/lon
-    lats = []
-    lats.extend(data_dict[key_dict['Latitude']])
-    lats.extend(cal_dict[key_dict['Latitude']])
-    if lats:  # check if GPS was active
-        lats.sort()
-        meta_dict['Min Latitude'] = lats[0]
-        meta_dict['Max Latitude'] = lats[-1]
-        # Min and max lon (only do this if there were lats)
-        lons = []
-        lons.extend(data_dict[key_dict['Longitude']])
-        lons.extend(cal_dict[key_dict['Longitude']])
-        lons.sort()
-        meta_dict['Min Longitude'] = lons[0]
-        meta_dict['Max Longitude'] = lons[-1]
-
-    return meta_dict
 
 
 def find_cal_reps(reps):
@@ -509,6 +284,7 @@ def reps_to_targets(reps):
 
     return targets
 
+
 def filter_lists(list1, list2, val):
     """
     Filters list one by a value of list two.
@@ -548,7 +324,7 @@ def find_cdap_key(hkeys_list, match_list):
     if len(key) > 1:
         raise KeyError('More than one header key matches the match list!')
     elif len(key) == 0:
-        raise KeyError('No matching header key found')
+        raise KeyError('No matching header key found for {0}'.format(match_list))
     else:
         return key[0]
 
@@ -669,6 +445,7 @@ def getFields(data):
         fields.append(row[0])
     return fields
 
+
 def coords2KML(lats, lons, starttimes, reps, saveto):
     """
     Converts latitudes and longitudes to KML file for inspection in Google Earth
@@ -696,7 +473,8 @@ def coords2KML(lats, lons, starttimes, reps, saveto):
 
 def mean(l):
     """Returns the mean of a list"""
-    return sum(l)/float(len(l))
+    return sum(map(float, l))/float(len(l))
+
 
 def determine_loc(lats,lons, project):
     """
@@ -730,7 +508,7 @@ def determine_loc(lats,lons, project):
         location = 'CSP01'
     elif (41.161405 <= lat <= 41.168761) and (-96.473668 <= lon <= -96.463818):
         location = 'CSP02'
-    elif (41.175715 <= lat <= 41.183072) and (-96.444978 <= lon <= -96.434610):
+    elif (41.1754 <= lat <= 41.183072) and (-96.444978 <= lon <= -96.434610):
         location = 'CSP03'
     else:
         # Fall back on project name
@@ -739,14 +517,18 @@ def determine_loc(lats,lons, project):
             location = 'CSP01'
         elif project in {'csp02', 'cspo2', 'csp2', 'bidirectionalcsp02', 'carbon2', 'cspg02', 'cps02', 'csp2brdf'}:
             location = 'CSP02'
-        elif project in {'csp03', 'cspo3', 'csp03a', 'cspo3a', 'cspg03', 'cspg03a', 'bidirectionalcsp03', 'cps03'}:
+        elif project in {'csp03', 'cspo3', 'cspg03', 'cspg03a', 'bidirectionalcsp03', 'cps03'}:
             location = 'CSP03'
+        elif project in {'csp03a', 'cspo3a'}:
+            location = 'CSP03A'
         elif project.find('mead') > -1 or project.find('csp') > -1 or project.find('cps') > -1:
             location = 'MEAD'
         else:
-            return None
+            print('Project {0} location not determined!'.format(project))
+            return None, None, None, None
 
     return location, 'United States', 'Nebraska', 'Saunders'
+
 
 def findScanIdx(fields):
     """Finds the file row number where scandata begins"""
@@ -757,6 +539,7 @@ def findScanIdx(fields):
         except ValueError:
             if field.lower().startswith('dc'):
                 return idx
+
 
 def plot_scans(prep, prep_data,vheader, scanidx,saveto=None):
     """"Plots prep data and optionally saves to file"""
