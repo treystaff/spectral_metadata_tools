@@ -26,8 +26,8 @@ class mySqlite:
 
     def get_last_id(self):
         self.cursor.execute('SELECT last_insert_rowid()')
-        id = self.cursor.fetchall()[0]
-        return id
+        last_id = self.cursor.fetchall()
+        return last_id[0][0]
 
     def commit(self):
         self.conn.commit()
