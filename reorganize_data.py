@@ -11,9 +11,12 @@ project names and rep names. This is then used to
 move images, vegfraction data, etc. to new directories.
 """
 
+from metadata import *
+from datalogger import *
 import re
 import os
 from utility import *
+from aux import *
 
 
 def process_upwelling(data_dir, out_dir):
@@ -38,23 +41,27 @@ def process_upwelling(data_dir, out_dir):
         up_pattern = r'^Outgoing.*\.txt'
         upwelling_files = [f for f in os.listdir(data_dir) if re.search(up_pattern, f)]
 
+    # If not upwelling files found, return None.
+    # TODO: Handle missing data files better. Probably should log this, along with other errors.
+    if not upwelling_files:
+        return None, None, None, None
+
     upwelling_files.sort()  # Sort the files so *Data01.txt is first
 
     raw_pattern = r'Raw Upwelling.*\.txt'
-    raw_upwelling_files = [data_dir + f for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
+    raw_upwelling_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
     if not raw_upwelling_files:
         raw_pattern = r'Raw Outgoing.*\.txt'
-        raw_upwelling_files = [data_dir + f for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
-
+        raw_upwelling_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
 
     # Load the file(s). If more than one, join into one data structure for easy access.
     first = True
     for upwelling_file in upwelling_files:
         if first:
-            data = readData(data_dir + upwelling_file)
+            data = readData(os.path.join(data_dir, upwelling_file))
         else:
             first = False
-            odata = readData(data_dir + upwelling_file)
+            odata = readData(os.path.join(data_dir, upwelling_file))
             for idx, row in enumerate(odata):
                 data[idx].extend(row[1:-1])
 
@@ -65,7 +72,6 @@ def process_upwelling(data_dir, out_dir):
         cdap2 = True
     else:
         cdap2 = False
-
 
     # Get the fields of the data
     fields = getFields(data)
@@ -104,8 +110,14 @@ def process_upwelling(data_dir, out_dir):
     for project in distinct_projects:
         # Find the location of each project
         plats, p_idxs = filter_lists(lats, projects, project)
-        plons = filter_lists(lons, projects, project)
-        location, country, state, county = determine_loc(lats, lons, project)
+        plons,_ = filter_lists(lons, projects, project)
+
+        location, country, state, county = determine_loc(plats, plons, project)
+        if location is None:
+            location = 'Unknown'
+            country = 'Unknown'
+            state = 'Unknown'
+            county = 'Unknown'
 
         # Maintain a dict of the indexes that match a location.
         if location in loc_idxs.keys():
@@ -139,7 +151,6 @@ def process_upwelling(data_dir, out_dir):
                             # Some rows don't span the whole document.
                             loc_list[idx].append('')
 
-
             loc_dict[location] = loc_list
             del loc_list
 
@@ -162,20 +173,34 @@ def process_upwelling(data_dir, out_dir):
         cal_dict, cal_scans, _ = data2dict(cal_data)
         cal_dict = standardize_project_name(cal_dict, key_dict)
 
+        # Modify the datalogger entry: split datalogger values into repsective fields
+        if data_dict[key_dict['Data Logger']]:
+            cal_dict, data_dict = datalogger_to_dict(cal_dict, data_dict, key_dict, data_dir)
+
         # Construct the metadata for this location.
         loc_meta[loc] = create_metadata_dict(cal_dict, data_dict, key_dict, data_dir)
         loc_meta[loc]['Location'] = loc
         loc_meta[loc]['County'] = county
         loc_meta[loc]['State'] = state
         loc_meta[loc]['Country'] = country
+        if loc in {'CSP01', 'CSP02', 'CSP03'}:
+            # We know it's outside.
+            loc_meta[loc]['Illumination Source'] = 'Sun'
+
+        # Add instrument-specific entries to loc_meta.
+        # Create a list of just the wavelengths
+        scan_keys = fields[scanidx:]
+        # Get only those that are actual wavelength numbers
+        wavelengths = filter_floats(scan_keys)
+
+        loc_meta[loc]['Upwelling Instrument Max Wavelength'] = max(wavelengths)
+        loc_meta[loc]['Upwelling Instrument Min Wavelength'] = min(wavelengths)
+        loc_meta[loc]['Upwelling Instrument Channels'] = len(wavelengths)
 
         if cdap2 is False:
             loc_meta[loc]['Acquisition Software'] = 'CALMIT Data Acquisition Program (CDAP)'
         else:
             loc_meta[loc]['Acquisition Software'] = 'CALMIT Data Acquisition Program (CDAP) 2'
-
-        # Modify the datalogger entry: split datalogger values into repsective fields
-        cal_dict, data_dict = datalogger_to_dict(cal_dict, data_dict, key_dict)
 
         # Construct a directory to put the restructured data in. (ou_dir/location/date/)
         loc_dir = os.path.join(out_dir, loc, data_dict[key_dict['Date']][0])
@@ -184,7 +209,8 @@ def process_upwelling(data_dir, out_dir):
         else:
             # We have a problem. This probably means there is more than one project per loc/date combo.
             raise IOError(loc_dir + ' already exists! This could mean there is another project with the same location '
-                                    'and date as a previously restructured dataset.')
+                                    'and date as a previously restructured dataset. Offending dataset:\n' +
+                          loc_meta[loc]['Legacy Path'])
 
         # Save the Aux and scandata files (data and cal) if they have data.
         dataset_id = loc_meta[loc]['Dataset ID']
@@ -235,25 +261,40 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
 
     # Process raw files if necessary
     raw_pattern = r'Raw Downwelling.*\.txt'
-    raw_downwelling_files = [data_dir + f for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
+    raw_downwelling_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
     if not raw_downwelling_files:
         raw_pattern = r'Raw Incoming.*\.txt'
-        raw_downwelling_files = [data_dir + f for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
+        raw_downwelling_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
     if raw_downwelling_files:
         create_raw_scans_files(raw_downwelling_files, cal_idxs, loc_idxs, loc_meta, key_dict, 'Downwelling', out_dir)
+
+    if not downwelling_files:
+        if raw_downwelling_files:
+            print('n No Downwelling but there are RAW DOWNWELLING...{0}'.format(data_dir))
+            return
+        else:
+            print('No Downwelling. {0}'.format(data_dir))
+            for loc in loc_idxs.keys():
+                loc_dir = os.path.join(out_dir, loc, loc_meta[loc]['Date'])
+                create_metadata_file(loc_meta[loc], os.path.join(loc_dir, 'Metadata.csv'))
+            return
 
     # Load the file(s). If more than one, join into one data structure for easy access.
     first = True
     for downwelling_file in downwelling_files:
         if first:
-            data = readData(data_dir + downwelling_file)
+            data = readData(os.path.join(data_dir, downwelling_file))
         else:
             first = False
-            odata = readData(data_dir + downwelling_file)
+            odata = readData(os.path.join(data_dir, downwelling_file))
             for idx, row in enumerate(odata):
                 data[idx].extend(row[1:-1])
 
             del odata
+
+    # Get the fields of the data
+    fields = getFields(data)
+    scanidx = findScanIdx(fields)
 
     # Split the data into locations
     for loc in loc_idxs.keys():
@@ -268,7 +309,6 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
 
         cal_dict, cal_scans, _ = data2dict(cal_data)
         cal_dict = standardize_project_name(cal_dict, key_dict)
-
 
         # Save the scandata files
         loc_dir = os.path.join(out_dir, loc, data_dict[key_dict['Date']][0])
@@ -285,12 +325,18 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
         loc_meta[loc]['Downwelling Instrument Name'] = instrument_name
         loc_meta[loc]['Downwelling Instrument Serial Number'] = snumber
         loc_meta[loc]['Downwelling Instrument FOV'] = fov
-        if loc in {'CSP01', 'CSP02', 'CSP03'}:
-            # We know it's outside.
-            loc_meta[loc]['Illumination Source'] = 'Sun'
+        # Add instrument-specific entries to loc_meta.
+        # Create a list of just the wavelengths
+        scan_keys = fields[scanidx:]
+        # Get only those that are actual wavelength numbers
+        wavelengths = filter_floats(scan_keys)
+
+        loc_meta[loc]['Downwelling Instrument Max Wavelength'] = max(wavelengths)
+        loc_meta[loc]['Downwelling Instrument Min Wavelength'] = min(wavelengths)
+        loc_meta[loc]['Downwelling Instrument Channels'] = len(wavelengths)
 
         # Write the new metadata entry
-        create_metadata_file(loc_meta[loc], loc_dir + '/Metadata.csv')
+        create_metadata_file(loc_meta[loc], os.path.join(loc_dir, 'Metadata.csv'))
 
 
 def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict):
@@ -304,10 +350,10 @@ def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
         first = True
         for ref_file in ref_files:
             if first:
-                data = readData(data_dir + ref_file)
+                data = readData(os.path.join(data_dir, ref_file))
             else:
                 first = False
-                odata = readData(data_dir + ref_file)
+                odata = readData(os.path.join(data_dir, ref_file))
                 for idx, row in enumerate(odata):
                     data[idx].extend(row[1:-1])
 
@@ -348,3 +394,38 @@ def test_split():
     cal_idxs, loc_idxs, loc_meta, key_dict = process_upwelling(data_dir, out_dir)
     process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
     process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
+
+
+def process_years(years):
+    base_dir = '/media/sf_Field-Data/'
+    out_dir = '/media/sf_tmp/restruct/'
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+
+    upPattern = re.compile('.*Upwelling.*\.txt')
+    outPattern = re.compile('.*Outgoing.*\.txt')
+
+    for year in years:
+        data_dir = os.path.join(base_dir, str(year))
+        for root, dirs, files in os.walk(data_dir):
+            # Ensure it's a CSP related directory, that it's not a renamed one, or a duplicate dir.
+            if '/'+str(year)+'/'+str(year) + '/' not in root and 'renamed' not in root.lower() and\
+            'combined' not in root.lower() and 'lab' not in root.lower() and 'test' not in root.lower()\
+                    and ('csp' in root.lower() or 'mead' in root.lower() or 'BLMV' in root):
+                # Only process the directory if it contains upwelling data.
+                if [file for file in files if upPattern.match(file) or outPattern.match(file)]:
+                    try:
+                        cal_idxs, loc_idxs, loc_meta, key_dict = process_upwelling(root, out_dir)
+                        if cal_idxs is None:
+                            print('Problem with {0} !'.format(root))
+                        else:
+                            process_downwelling(root, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
+                            process_reflectance(root, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
+
+                    except Exception, e:
+                        with open('/media/sf_tmp/restruct/log.txt', 'a') as logfile:
+                            problem_str = 'PROBLEM PROCESSING {0}! Exception:\n {1} \n' \
+                                          '-------------------------------------------------------------' \
+                                          '\n'.format(root, e)
+                            print(problem_str)
+                            logfile.write(problem_str)
