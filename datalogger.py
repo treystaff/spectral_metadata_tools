@@ -31,7 +31,7 @@ def split_datalogger_entries(datalogger_strs):
     return map(split_datalogger_entry, datalogger_strs)
 
 
-def datalogger_to_dict(cal_dict, data_dict, key_dict, data_dir):
+def datalogger_to_dict(data_dict, key_dict, data_dir):
     """
     Removes the datalogger entry from cal and data dicts, replacing with new fields for each logged value.
 
@@ -41,10 +41,9 @@ def datalogger_to_dict(cal_dict, data_dict, key_dict, data_dir):
         key_dict - A key dictionary created via create_key_dict()
 
     Returns:
-        cal_dict, data_dict, key_dict - Modified dictionaries.
+        data_dict, key_dict - Modified dictionaries.
     """
     data_datalogger = data_dict[key_dict['Data Logger']]
-    cal_datalogger = cal_dict[key_dict['Data Logger']]
     num_entries = len(split_datalogger_entry(data_datalogger[0]))
 
     # Split out all of the data from the datalogger strings. Each var is it's own list.
@@ -84,7 +83,6 @@ def datalogger_to_dict(cal_dict, data_dict, key_dict, data_dir):
         if name is not None:
             key_dict[name] = name  # Add this to the key dict, for consistency (other functs rely on it).
             data_dict[name] = []
-            cal_dict[name] = []
 
     # Add the data to the data dict
     for name, values in zip(entry_names, data_entries):
@@ -110,34 +108,7 @@ def datalogger_to_dict(cal_dict, data_dict, key_dict, data_dir):
                     else:
                         data_dict[name].append(value)
 
-    # Add data to the cal dict
-    cal_entries = split_datalogger_entries(cal_datalogger)
-    for name, values in zip(entry_names, zip(*cal_entries)):
-        if name is not None:
-            # Check for a list of nodata.
-            unique_vals = [val for val in values if val != '']
-            unique_vals = set(unique_vals)
-            try:
-                if all(float(val) < 0 for val in unique_vals):
-                    # Don't add to the cal_dict.
-                    pass
-                else:
-                    cal_dict[name] = []
-                    for value in values:
-                        # We assume DL values less than 0 are bad/nodata values.
-                        if value == '':
-                            cal_dict[name].append('-9999')
-                        elif float(value) < 0:
-                            # TODO standardize nodata value. For now, use -9999
-                            cal_dict[name].append('-9999')
-                        elif name in {'Temperature 1', 'Temperature 2'} and float(value) > 250:
-                            cal_dict[name].append('-9999')
-                        else:
-                            cal_dict[name].append(value)
-            except ValueError as e:
-                print('COULD NOT CONVERT {0} TO FLOAT'.format(unique_vals))
-                raise e
 
-    del cal_dict[key_dict['Data Logger']], data_dict[key_dict['Data Logger']]
-    return cal_dict, data_dict
+    del data_dict[key_dict['Data Logger']]
+    return data_dict
 
