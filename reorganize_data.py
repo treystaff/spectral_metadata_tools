@@ -154,31 +154,71 @@ def process_upwelling(data_dir, out_dir):
             loc_dict[location] = loc_list
             del loc_list
 
+    all_reps = data[fields.index(key_dict['Replication'])][1:-1]
+    cal_idxs = find_cal_reps(all_reps)
+    cal_data, _ = split_cal_scans(data, cal_idxs)
+    # Convert to dicts for ease of access
+    cal_dict, cal_scans, _ = data2dict(cal_data)
+    cal_dict = standardize_project_name(cal_dict, key_dict)
+
+    # Modify the datalogger entry: split datalogger values into respective fields
+    if cal_dict[key_dict['Data Logger']]:
+        cal_dict = datalogger_to_dict(cal_dict, key_dict, data_dir)
+
+    # Create the calibration metadata dict
+    cal_meta = create_metadata_dict(cal_dict, key_dict, data_dir)
+
+    # Create a list of just the wavelengths
+    scan_keys = fields[scanidx:]
+    # Get only those that are actual wavelength numbers
+    wavelengths = filter_floats(scan_keys)
+
+    # Add instrument-specific meta to cal_meta.
+    cal_meta['Upwelling Instrument Max Wavelength'] = max(wavelengths)
+    cal_meta['Upwelling Instrument Min Wavelength'] = min(wavelengths)
+    cal_meta['Upwelling Instrument Channels'] = len(wavelengths)
+
+    if cdap2 is False:
+        cal_meta['Acquisition Software'] = 'CALMIT Data Acquisition Program (CDAP)'
+    else:
+        cal_meta['Acquisition Software'] = 'CALMIT Data Acquisition Program (CDAP) 2'
+
+    # Create the directory cal info will be stored in
+    cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
+    if not os.path.exists(cal_dir):
+        os.makedirs(cal_dir)
+    else:
+        raise IOError('CAL DIRECTORY {0} EXISTS.'.format(cal_dir))
+
+    # Create the cal aux and scan files
+    if cal_dict[key_dict['Replication']]:
+        dataset_id = cal_meta['Dataset ID']
+        create_aux_file(cal_dict, key_dict, other_keys, dataset_id, os.path.join(cal_dir, 'Auxiliary_Cal.csv'))
+        create_scan_file(cal_dict, key_dict, cal_scans, dataset_id, os.path.join(cal_dir, '/Upwelling_Cal_data.csv'))
+
     # Now process each location individually
     loc_meta = dict()
-    cal_idxs = dict()
     for loc in loc_dict.keys():
         # Load the data for the location, and convert to a dictionary for easy-access.
         data = loc_dict[loc]
 
         # Put the caldata in a separate list
-        reps = data[fields.index(key_dict['Replication'])][1:-1]
-        cal_idxs[loc] = find_cal_reps(reps)
-        cal_data, scan_data = split_cal_scans(data, cal_idxs[loc])
+        reps = data[fields.index(key_dict['Replication'])][1:]
+        loc_cal_idxs = find_cal_reps(reps)
+
+        #cal_data, scan_data = split_cal_scans(data, cal_idxs[loc])
+        _, scan_data = split_cal_scans(data, loc_cal_idxs)
 
         # Convert to dicts for ease of access
         data_dict, data_scans, _ = data2dict(scan_data)
         data_dict = standardize_project_name(data_dict, key_dict)
 
-        cal_dict, cal_scans, _ = data2dict(cal_data)
-        cal_dict = standardize_project_name(cal_dict, key_dict)
-
-        # Modify the datalogger entry: split datalogger values into repsective fields
+        # Modify the datalogger entry: split datalogger values into respective fields
         if data_dict[key_dict['Data Logger']]:
-            cal_dict, data_dict = datalogger_to_dict(cal_dict, data_dict, key_dict, data_dir)
+            data_dict = datalogger_to_dict(data_dict, key_dict, data_dir)
 
         # Construct the metadata for this location.
-        loc_meta[loc] = create_metadata_dict(cal_dict, data_dict, key_dict, data_dir)
+        loc_meta[loc] = create_metadata_dict(data_dict, key_dict, data_dir)
         loc_meta[loc]['Location'] = loc
         loc_meta[loc]['County'] = county
         loc_meta[loc]['State'] = state
@@ -187,12 +227,7 @@ def process_upwelling(data_dir, out_dir):
             # We know it's outside.
             loc_meta[loc]['Illumination Source'] = 'Sun'
 
-        # Add instrument-specific entries to loc_meta.
-        # Create a list of just the wavelengths
-        scan_keys = fields[scanidx:]
-        # Get only those that are actual wavelength numbers
-        wavelengths = filter_floats(scan_keys)
-
+        # Add instrument-specific entries to loc_meta
         loc_meta[loc]['Upwelling Instrument Max Wavelength'] = max(wavelengths)
         loc_meta[loc]['Upwelling Instrument Min Wavelength'] = min(wavelengths)
         loc_meta[loc]['Upwelling Instrument Channels'] = len(wavelengths)
@@ -203,7 +238,7 @@ def process_upwelling(data_dir, out_dir):
             loc_meta[loc]['Acquisition Software'] = 'CALMIT Data Acquisition Program (CDAP) 2'
 
         # Construct a directory to put the restructured data in. (ou_dir/location/date/)
-        loc_dir = os.path.join(out_dir, loc, data_dict[key_dict['Date']][0])
+        loc_dir = os.path.join(out_dir, data_dict[key_dict['Date']][0], loc)
         if not os.path.exists(loc_dir):
             os.makedirs(loc_dir)
         else:
@@ -217,30 +252,28 @@ def process_upwelling(data_dir, out_dir):
         if data_dict[key_dict['Replication']]:
             create_aux_file(data_dict, key_dict, other_keys, dataset_id, loc_dir + '/Auxiliary.csv')
             create_scan_file(data_dict, key_dict, data_scans, dataset_id, loc_dir + '/Upwelling_data.csv')
-        if cal_dict[key_dict['Replication']]:
-            create_aux_file(cal_dict, key_dict, other_keys, dataset_id, loc_dir + '/Auxiliary_Cal.csv')
-            create_scan_file(cal_dict, key_dict, cal_scans, dataset_id, loc_dir + '/Upwelling_Cal_data.csv')
 
     # Create raw scandata files if raw data files exist
     if raw_upwelling_files:
-        create_raw_scans_files(raw_upwelling_files, cal_idxs, loc_idxs, loc_meta, key_dict, 'Upwelling', out_dir)
+        create_raw_scans_files(raw_upwelling_files, cal_idxs, loc_idxs, loc_meta, cal_meta,key_dict, 'Upwelling', out_dir)
 
     # Return the metadata dict and key_dict
-    return cal_idxs, loc_idxs, loc_meta, key_dict
+    return cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict
 
     # TODO Also return info on location directory paths w/ loc & reps so other files can be moved.
 
 
-def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict):
+def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict):
     """
     Processes the upwelling file(s) in a CDAP data directory.
 
     Parameters:
         data_dir - String. Path to CDAP data directory.
         out_dir - String. Path to store reorganized data.
-        cal_idxs - Dict. From process_upwelling
+        cal_idxs - List. From process_upwelling
         loc_idxs - Dict. From process_upwelling
         loc_meta - Dict. From process_upwelling
+        cal_meta - Dict. From process_upwelling
         key_dict - Dict. From process_upwelling
 
     Returns:
@@ -266,7 +299,7 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
         raw_pattern = r'Raw Incoming.*\.txt'
         raw_downwelling_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if re.search(raw_pattern, f)]
     if raw_downwelling_files:
-        create_raw_scans_files(raw_downwelling_files, cal_idxs, loc_idxs, loc_meta, key_dict, 'Downwelling', out_dir)
+        create_raw_scans_files(raw_downwelling_files, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, 'Downwelling', out_dir)
 
     if not downwelling_files:
         if raw_downwelling_files:
@@ -274,8 +307,10 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
             return
         else:
             print('No Downwelling. {0}'.format(data_dir))
+            cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
+            create_metadata_file(cal_meta, os.path.join(cal_dir, 'Metadata.csv'))
             for loc in loc_idxs.keys():
-                loc_dir = os.path.join(out_dir, loc, loc_meta[loc]['Date'])
+                loc_dir = os.path.join(out_dir, loc_meta[loc]['Date'], loc)
                 create_metadata_file(loc_meta[loc], os.path.join(loc_dir, 'Metadata.csv'))
             return
 
@@ -296,28 +331,57 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
     fields = getFields(data)
     scanidx = findScanIdx(fields)
 
+    # Deal with cal data first
+    cal_data, _ = split_cal_scans(data, cal_idxs)
+    cal_dict, cal_scans, _ = data2dict(cal_data)
+    cal_dict = standardize_project_name(cal_dict, key_dict)
+
+    cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
+    dataset_id = cal_meta['Dataset ID']
+
+    if cal_dict[key_dict['Replication']]:
+            create_scan_file(cal_dict, key_dict, cal_scans, dataset_id,
+                             os.path.join(cal_dir, 'Downwelling_Cal_data.csv'))
+
+    # Update the metadata
+    instrument_str = cal_dict[key_dict['Instrument']][0]
+    instrument_name, snumber, fov = get_instrument_info(instrument_str)
+    cal_meta['Downwelling Instrument Name'] = instrument_name
+    cal_meta['Downwelling Instrument Serial Number'] = snumber
+    cal_meta['Downwelling Instrument FOV'] = fov
+    # Add instrument-specific entries to loc_meta.
+    # Create a list of just the wavelengths
+    scan_keys = fields[scanidx:]
+    # Get only those that are actual wavelength numbers
+    wavelengths = filter_floats(scan_keys)
+    cal_meta['Downwelling Instrument Max Wavelength'] = max(wavelengths)
+    cal_meta['Downwelling Instrument Min Wavelength'] = min(wavelengths)
+    cal_meta['Downwelling Instrument Channels'] = len(wavelengths)
+
+    # Write the new metadata entry
+    create_metadata_file(cal_meta, os.path.join(cal_dir, 'Metadata.csv'))
+
     # Split the data into locations
     for loc in loc_idxs.keys():
         loc_data = split_by_idxs(data, loc_idxs[loc])
 
+        reps = loc_data[fields.index(key_dict['Replication'])][1:-1]
+        loc_cal_idxs = find_cal_reps(reps)
+
         # Now split each location's data into scan and cal data.
-        cal_data, scan_data = split_cal_scans(loc_data, cal_idxs[loc])
+        _, scan_data = split_cal_scans(loc_data, loc_cal_idxs)
 
         # Create the data dicts
         data_dict, data_scans, _ = data2dict(scan_data)
         data_dict = standardize_project_name(data_dict, key_dict)
 
-        cal_dict, cal_scans, _ = data2dict(cal_data)
-        cal_dict = standardize_project_name(cal_dict, key_dict)
-
         # Save the scandata files
-        loc_dir = os.path.join(out_dir, loc, data_dict[key_dict['Date']][0])
+        loc_dir = os.path.join(out_dir, data_dict[key_dict['Date']][0], loc)
         dataset_id = loc_meta[loc]['Dataset ID']
 
         if data_dict[key_dict['Replication']]:
-            create_scan_file(data_dict, key_dict, data_scans, dataset_id, loc_dir + '/Downwelling_data.csv')
-        if cal_dict[key_dict['Replication']]:
-            create_scan_file(cal_dict, key_dict, cal_scans, dataset_id, loc_dir + '/Downwelling_Cal_data.csv')
+            create_scan_file(data_dict, key_dict, data_scans, dataset_id,
+                             os.path.join(loc_dir, 'Downwelling_data.csv'))
 
         # Update the metadata
         instrument_str = data_dict[key_dict['Instrument']][0]
@@ -326,11 +390,6 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
         loc_meta[loc]['Downwelling Instrument Serial Number'] = snumber
         loc_meta[loc]['Downwelling Instrument FOV'] = fov
         # Add instrument-specific entries to loc_meta.
-        # Create a list of just the wavelengths
-        scan_keys = fields[scanidx:]
-        # Get only those that are actual wavelength numbers
-        wavelengths = filter_floats(scan_keys)
-
         loc_meta[loc]['Downwelling Instrument Max Wavelength'] = max(wavelengths)
         loc_meta[loc]['Downwelling Instrument Min Wavelength'] = min(wavelengths)
         loc_meta[loc]['Downwelling Instrument Channels'] = len(wavelengths)
@@ -339,7 +398,7 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
         create_metadata_file(loc_meta[loc], os.path.join(loc_dir, 'Metadata.csv'))
 
 
-def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict):
+def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict):
     # Find CDAP downwelling files in the data directory
     ref_pattern = r'^Reflectance.*\.txt'
     ref_files = [f for f in os.listdir(data_dir) if re.search(ref_pattern, f)]
@@ -359,29 +418,39 @@ def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dic
 
                 del odata
 
+        fields = getFields(data)
+
+        # Deal with cal data first.
+        cal_data, _ = split_cal_scans(data, cal_idxs)
+        cal_dict, cal_scans, _ = data2dict(cal_data)
+        cal_dict = standardize_project_name(cal_dict, key_dict)
+        dataset_id = cal_meta['Dataset ID']
+        cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
+        if cal_dict[key_dict['Replication']]:
+            create_scan_file(cal_dict, key_dict, cal_scans, dataset_id,
+                             os.path.join(cal_dir, 'Reflectance_Cal_data.csv'))
+
         # Split the data into locations
         for loc in loc_idxs.keys():
             loc_data = split_by_idxs(data, loc_idxs[loc])
 
             # Now split each location's data into scan and cal data.
-            cal_data, scan_data = split_cal_scans(loc_data, cal_idxs[loc])
+            reps = loc_data[fields.index(key_dict['Replication'])][1:-1]
+            loc_cal_idxs = find_cal_reps(reps)
+
+            _, scan_data = split_cal_scans(loc_data, loc_cal_idxs)
 
             # Create the data dicts
             data_dict, data_scans, _ = data2dict(scan_data)
             data_dict = standardize_project_name(data_dict, key_dict)
 
-            cal_dict, cal_scans, _ = data2dict(cal_data)
-            cal_dict = standardize_project_name(cal_dict, key_dict)
-
             # Save the scandata files
-            loc_dir = os.path.join(out_dir, loc, data_dict[key_dict['Date']][0])
+            loc_dir = os.path.join(out_dir, data_dict[key_dict['Date']][0], loc)
             dataset_id = loc_meta[loc]['Dataset ID']
 
             if data_dict[key_dict['Replication']]:
-                create_scan_file(data_dict, key_dict, data_scans, dataset_id, os.path.join(loc_dir, 'Reflectance_data.csv'))
-            if cal_dict[key_dict['Replication']]:
-                create_scan_file(cal_dict, key_dict, cal_scans, dataset_id,
-                                 os.path.join(loc_dir, 'Reflectance_Cal_data.csv'))
+                create_scan_file(data_dict, key_dict, data_scans, dataset_id,
+                                 os.path.join(loc_dir, 'Reflectance_data.csv'))
 
 
 def test_split():
@@ -391,9 +460,10 @@ def test_split():
     shutil.rmtree(out_dir)
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    cal_idxs, loc_idxs, loc_meta, key_dict = process_upwelling(data_dir, out_dir)
-    process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
-    process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
+    cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(data_dir, out_dir)
+    process_otherfiles(data_dir, out_dir, cal_meta, loc_meta)
+    process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+    process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
 
 
 def process_years(years):
@@ -415,12 +485,13 @@ def process_years(years):
                 # Only process the directory if it contains upwelling data.
                 if [file for file in files if upPattern.match(file) or outPattern.match(file)]:
                     try:
-                        cal_idxs, loc_idxs, loc_meta, key_dict = process_upwelling(root, out_dir)
+                        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(root, out_dir)
+                        process_otherfiles(root, out_dir, cal_meta, loc_meta)
                         if cal_idxs is None:
                             print('Problem with {0} !'.format(root))
                         else:
-                            process_downwelling(root, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
-                            process_reflectance(root, out_dir, cal_idxs, loc_idxs, loc_meta, key_dict)
+                            process_downwelling(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+                            process_reflectance(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
 
                     except Exception, e:
                         with open('/media/sf_tmp/restruct/log.txt', 'a') as logfile:

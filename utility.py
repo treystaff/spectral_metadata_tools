@@ -34,7 +34,7 @@ def filter_floats(l, convert=True, remove_val=-9999):
     return filtered
 
 
-def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, key_dict, type, out_dir):
+def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, data_type, out_dir):
     """
     Creates a raw scans file
     """
@@ -54,28 +54,38 @@ def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, key_dict, t
 
             del odata
 
-    # Split the data into locations
+    fields = getFields(data)
+
+    # Deal with the cal data
+    cal_data, _ = split_cal_scans(data, cal_idxs)
+    cal_dict, cal_scans, _ = data2dict(cal_data)
+
+    cal_dir = os.path.join(out_dir, cal_dict[key_dict['Date']][0], 'cal_data')
+    dataset_id = cal_meta['Dataset ID']
+    if cal_dict[key_dict['Replication']]:
+        create_scan_file(cal_dict, key_dict, cal_scans, dataset_id,
+                        os.path.join(cal_dir, 'Raw_{0}_Cal_data.csv'.format(data_type)))
+
+    # Split the data into locations ( for non-cal data)
     for loc in loc_idxs.keys():
         loc_data = split_by_idxs(data, loc_idxs[loc])
 
+        reps = loc_data[fields.index(key_dict['Replication'])][1:-1]
+        loc_cal_idxs = find_cal_reps(reps)
+
         # Now split each location's data into scan and cal data.
-        cal_data, scan_data = split_cal_scans(loc_data, cal_idxs[loc])
+        _, scan_data = split_cal_scans(loc_data, loc_cal_idxs)
 
         # Create the data dicts
         data_dict, data_scans, _ = data2dict(scan_data)
-        cal_dict, cal_scans, _ = data2dict(cal_data)
 
         # Save the scandata files
-        loc_dir = os.path.join(out_dir, loc, data_dict[key_dict['Date']][0])
+        loc_dir = os.path.join(out_dir,data_dict[key_dict['Date']][0], loc)
         dataset_id = loc_meta[loc]['Dataset ID']
 
         if data_dict[key_dict['Replication']]:
             create_scan_file(data_dict, key_dict, data_scans, dataset_id,
-                             os.path.join(loc_dir, 'Raw_{0}_data.csv'.format(type)))
-
-        if cal_dict[key_dict['Replication']]:
-            create_scan_file(cal_dict, key_dict, cal_scans, dataset_id,
-                             os.path.join(loc_dir, 'Raw_{0}_Cal_data.csv'.format(type)))
+                             os.path.join(loc_dir, 'Raw_{0}_data.csv'.format(data_type)))
 
 
 def standardize_project_name(data_dict, key_dict):
@@ -100,7 +110,7 @@ def standardize_project_name(data_dict, key_dict):
         elif project_name in {'csp03', 'cspg03', 'csp3', 'cspo3', 'carbon3', 'cps03', 'carbon3'}:
             project_names[idx] = 'CSP03'
         elif project_name in {'csp03a', 'cspo3a', 'cspg03a', 'carbon3a'}:
-            project_names[idx] = 'CSP03_A'
+            project_names[idx] = 'CSP03A'
         elif project_name in {'bidirectionalcsp01', 'csp1brdf'}:
             project_names[idx] = 'CSP01_BDRF'
         elif project_name in {'bidirectionalcsp02', 'csp2brdf'}:
@@ -508,7 +518,9 @@ def determine_loc(lats,lons, project):
         location = 'CSP01'
     elif (41.161405 <= lat <= 41.168761) and (-96.473668 <= lon <= -96.463818):
         location = 'CSP02'
-    elif (41.1754 <= lat <= 41.183072) and (-96.444978 <= lon <= -96.434610):
+    elif (41.17547 <= lat <= 41.1793) and (-96.444978 <= lon <= -96.43475):
+        location = 'CSP03A'
+    elif (41.17937 <= lat <= 41.183) and (-96.44494 <= lon <= -96.43465):
         location = 'CSP03'
     else:
         # Fall back on project name
@@ -517,9 +529,9 @@ def determine_loc(lats,lons, project):
             location = 'CSP01'
         elif project in {'csp02', 'cspo2', 'csp2', 'bidirectionalcsp02', 'carbon2', 'cspg02', 'cps02', 'csp2brdf'}:
             location = 'CSP02'
-        elif project in {'csp03', 'cspo3', 'cspg03', 'cspg03a', 'bidirectionalcsp03', 'cps03'}:
+        elif project in {'csp03', 'cspo3', 'cspg03', 'bidirectionalcsp03', 'cps03'}:
             location = 'CSP03'
-        elif project in {'csp03a', 'cspo3a'}:
+        elif project in {'csp03a', 'cspo3a', 'csp3_a', 'cspg03a'}:
             location = 'CSP03A'
         elif project.find('mead') > -1 or project.find('csp') > -1 or project.find('cps') > -1:
             location = 'MEAD'
