@@ -27,8 +27,7 @@ logging.basicConfig(filename='/home/trey/CODE/LOG.log')
 def mean(l):
     return sum(l)/float(len(l))
 
-def find_loc(lats,lons, prep):
-    locations = ''
+def determine_loc(lats,lons):
 
     # Convert lats & lons to floats from strings
     lats = [float(lat) for lat in lats if lat != '']
@@ -36,12 +35,11 @@ def find_loc(lats,lons, prep):
 
     # The rep has no GPS values.
     if len(lats) < 1 or len(lons) < 1:
-        return 'UNKNOWN','UNKNOWN'
+        return 'UNKNOWN'
 
     # Find the mean lat/lon
     lat = mean(lats)
     lon = mean(lons)
-
 
     if (41.161607 <= lat <= 41.169437) and (-96.483063 <= lon <= -96.47315):
         location = 'CSP1'
@@ -52,17 +50,7 @@ def find_loc(lats,lons, prep):
     else:
         location = 'OUT OF RANGE'
 
-    if (41.161607 <= any(lats) <= 41.169437) and (-96.483063 <= any(lons) <= -96.47315):
-        locations += 'CSP1; '
-    if (41.161405 <= any(lats) <= 41.168761) and (-96.473668 <= any(lons) <= -96.463818):
-        locations += 'CSP2; '
-    if (41.175715 <= any(lats) <= 41.183072) and (-96.444978 <= any(lons) <= -96.434610):
-        locations += 'CSP3; '
-
-    if locations == '':
-        locations = 'OUT OF RANGE'
-
-    return location, locations
+    return location
 
 def process_cdap(path, filename, subdirs):
     logging.basicConfig(filename='/home/trey/CODE/LOG.log')

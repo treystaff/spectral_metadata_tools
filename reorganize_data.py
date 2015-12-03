@@ -17,6 +17,9 @@ import re
 import os
 from utility import *
 from aux import *
+import logging
+import time
+import traceback
 
 
 def process_upwelling(data_dir, out_dir):
@@ -46,6 +49,10 @@ def process_upwelling(data_dir, out_dir):
     if not upwelling_files:
         return None, None, None, None
 
+    # Log that we are processing this directory. Note this is a stopgap for a better solution in the future....:
+    logging.info('-------------------------------------------------------------\n'
+                 'Processing {0}. Started {1} \n'.format(data_dir, time.strftime('%d/%m/%Y at %H:%M:%S')))
+
     upwelling_files.sort()  # Sort the files so *Data01.txt is first
 
     raw_pattern = r'Raw Upwelling.*\.txt'
@@ -59,11 +66,11 @@ def process_upwelling(data_dir, out_dir):
     for upwelling_file in upwelling_files:
         if first:
             data = readData(os.path.join(data_dir, upwelling_file))
-        else:
             first = False
+        else:
             odata = readData(os.path.join(data_dir, upwelling_file))
             for idx, row in enumerate(odata):
-                data[idx].extend(row[1:-1])
+                data[idx].extend(row[1:])
 
             del odata
 
@@ -155,7 +162,8 @@ def process_upwelling(data_dir, out_dir):
             del loc_list
 
     all_reps = data[fields.index(key_dict['Replication'])][1:-1]
-    cal_idxs = find_cal_reps(all_reps)
+    all_filenames = data[fields.index('File Name')][1:-1]
+    cal_idxs = find_cal_reps(all_reps, all_filenames)
     cal_data, _ = split_cal_scans(data, cal_idxs)
     # Convert to dicts for ease of access
     cal_dict, cal_scans, _ = data2dict(cal_data)
@@ -188,7 +196,10 @@ def process_upwelling(data_dir, out_dir):
     if not os.path.exists(cal_dir):
         os.makedirs(cal_dir)
     else:
-        raise IOError('CAL DIRECTORY {0} EXISTS.'.format(cal_dir))
+        # We have an issue...There appears to already be cal data here.
+        # For now, we will place cal data from each dataset into separate directories.
+        # TODO possibly combine caldata into one file. Need to investigate this first.
+        cal_dir = create_dataset_dirs(cal_dir, cal_meta['Dataset ID'])
 
     # Create the cal aux and scan files
     if cal_dict[key_dict['Replication']]:
@@ -204,7 +215,8 @@ def process_upwelling(data_dir, out_dir):
 
         # Put the caldata in a separate list
         reps = data[fields.index(key_dict['Replication'])][1:]
-        loc_cal_idxs = find_cal_reps(reps)
+        raw_filenames = data[fields.index('File Name')][1:]
+        loc_cal_idxs = find_cal_reps(reps, raw_filenames)
 
         #cal_data, scan_data = split_cal_scans(data, cal_idxs[loc])
         _, scan_data = split_cal_scans(data, loc_cal_idxs)
@@ -243,15 +255,13 @@ def process_upwelling(data_dir, out_dir):
             os.makedirs(loc_dir)
         else:
             # We have a problem. This probably means there is more than one project per loc/date combo.
-            raise IOError(loc_dir + ' already exists! This could mean there is another project with the same location '
-                                    'and date as a previously restructured dataset. Offending dataset:\n' +
-                          loc_meta[loc]['Legacy Path'])
+            loc_dir = create_dataset_dirs(loc_dir, loc_meta[loc]['Dataset ID'])
 
         # Save the Aux and scandata files (data and cal) if they have data.
         dataset_id = loc_meta[loc]['Dataset ID']
         if data_dict[key_dict['Replication']]:
-            create_aux_file(data_dict, key_dict, other_keys, dataset_id, loc_dir + '/Auxiliary.csv')
-            create_scan_file(data_dict, key_dict, data_scans, dataset_id, loc_dir + '/Upwelling_data.csv')
+            create_aux_file(data_dict, key_dict, other_keys, dataset_id, os.path.join(loc_dir, 'Auxiliary.csv'))
+            create_scan_file(data_dict, key_dict, data_scans, dataset_id, os.path.join(loc_dir, 'Upwelling_data.csv'))
 
     # Create raw scandata files if raw data files exist
     if raw_upwelling_files:
@@ -319,11 +329,11 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
     for downwelling_file in downwelling_files:
         if first:
             data = readData(os.path.join(data_dir, downwelling_file))
-        else:
             first = False
+        else:
             odata = readData(os.path.join(data_dir, downwelling_file))
             for idx, row in enumerate(odata):
-                data[idx].extend(row[1:-1])
+                data[idx].extend(row[1:])
 
             del odata
 
@@ -365,8 +375,9 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
     for loc in loc_idxs.keys():
         loc_data = split_by_idxs(data, loc_idxs[loc])
 
-        reps = loc_data[fields.index(key_dict['Replication'])][1:-1]
-        loc_cal_idxs = find_cal_reps(reps)
+        reps = loc_data[fields.index(key_dict['Replication'])][1:]
+        raw_filenames = loc_data[fields.index('File Name')][1:]
+        loc_cal_idxs = find_cal_reps(reps, raw_filenames)
 
         # Now split each location's data into scan and cal data.
         _, scan_data = split_cal_scans(loc_data, loc_cal_idxs)
@@ -410,11 +421,11 @@ def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
         for ref_file in ref_files:
             if first:
                 data = readData(os.path.join(data_dir, ref_file))
-            else:
                 first = False
+            else:
                 odata = readData(os.path.join(data_dir, ref_file))
                 for idx, row in enumerate(odata):
-                    data[idx].extend(row[1:-1])
+                    data[idx].extend(row[1:])
 
                 del odata
 
@@ -435,8 +446,9 @@ def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
             loc_data = split_by_idxs(data, loc_idxs[loc])
 
             # Now split each location's data into scan and cal data.
-            reps = loc_data[fields.index(key_dict['Replication'])][1:-1]
-            loc_cal_idxs = find_cal_reps(reps)
+            reps = loc_data[fields.index(key_dict['Replication'])][1:]
+            raw_filenames = loc_data[fields.index('File Name')][1:]
+            loc_cal_idxs = find_cal_reps(reps, raw_filenames)
 
             _, scan_data = split_cal_scans(loc_data, loc_cal_idxs)
 
@@ -458,15 +470,26 @@ def test_split():
     data_dir = '/media/sf_tmp/exdata/'
     out_dir = '/media/sf_tmp/restruct_test/'
     shutil.rmtree(out_dir)
+
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(data_dir, out_dir)
-    process_otherfiles(data_dir, out_dir, cal_meta, loc_meta)
-    process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
-    process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+
+    logging.basicConfig(filename='/media/sf_tmp/restruct_test/app_log.txt',
+                        format='%(levelname)s: %(message)s', level=logging.DEBUG)
+
+    try:
+        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(data_dir, out_dir)
+        process_otherfiles(data_dir, out_dir, cal_meta, loc_meta)
+        process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+        process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+    finally:
+        logging.shutdown()
 
 
 def process_years(years):
+    logging.basicConfig(filename='/media/sf_tmp/restruct/app_log.txt',
+                        format='%(levelname)s: %(message)s',level=logging.DEBUG)
+
     base_dir = '/media/sf_Field-Data/'
     out_dir = '/media/sf_tmp/restruct/'
     if not os.path.exists(out_dir):
@@ -476,14 +499,16 @@ def process_years(years):
     outPattern = re.compile('.*Outgoing.*\.txt')
 
     for year in years:
+        logging.info('Processing year {0}. Started {1}'.format(year, time.strftime('%d/%m/%Y at %H:%M:%S')))
         data_dir = os.path.join(base_dir, str(year))
         for root, dirs, files in os.walk(data_dir):
             # Ensure it's a CSP related directory, that it's not a renamed one, or a duplicate dir.
             if '/'+str(year)+'/'+str(year) + '/' not in root and 'renamed' not in root.lower() and\
             'combined' not in root.lower() and 'lab' not in root.lower() and 'test' not in root.lower()\
+                and 'smallplots' not in root.lower()\
                     and ('csp' in root.lower() or 'mead' in root.lower() or 'BLMV' in root):
                 # Only process the directory if it contains upwelling data.
-                if [file for file in files if upPattern.match(file) or outPattern.match(file)]:
+                if [f for f in files if upPattern.match(f) or outPattern.match(f)]:
                     try:
                         cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(root, out_dir)
                         process_otherfiles(root, out_dir, cal_meta, loc_meta)
@@ -494,9 +519,11 @@ def process_years(years):
                             process_reflectance(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
 
                     except Exception, e:
-                        with open('/media/sf_tmp/restruct/log.txt', 'a') as logfile:
-                            problem_str = 'PROBLEM PROCESSING {0}! Exception:\n {1} \n' \
-                                          '-------------------------------------------------------------' \
-                                          '\n'.format(root, e)
-                            print(problem_str)
-                            logfile.write(problem_str)
+                        problem_str = 'PROBLEM PROCESSING {0}! Exception:\n {1} \n'\
+                                      '-------------------------------------------------------------'\
+                                      '\n'.format(root, traceback.format_exc())
+
+                        logging.error(problem_str)
+                        warnings.warn(problem_str)
+
+        logging.shutdown()

@@ -31,6 +31,19 @@ def split_datalogger_entries(datalogger_strs):
     return map(split_datalogger_entry, datalogger_strs)
 
 
+def unzip_dlogger_entries(split_entries, num_entries):
+    '''
+
+    Unzips split datalogger entries. Replaces zip(*split_datalogger_entries(data_datlogger))
+    to support missing datalogger entries (e.g., '')
+    '''
+    for idx, entry in enumerate(split_entries):
+        if entry == ['']:
+            split_entries[idx] = ['-9999'] * num_entries
+
+    return zip(*split_entries)
+
+
 def datalogger_to_dict(data_dict, key_dict, data_dir):
     """
     Removes the datalogger entry from cal and data dicts, replacing with new fields for each logged value.
@@ -44,10 +57,14 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
         data_dict, key_dict - Modified dictionaries.
     """
     data_datalogger = data_dict[key_dict['Data Logger']]
-    num_entries = len(split_datalogger_entry(data_datalogger[0]))
+    for data_str in data_datalogger:
+        split_entry = split_datalogger_entry(data_str)
+        if data_str != '':
+            num_entries = len(split_entry)
+            break
 
     # Split out all of the data from the datalogger strings. Each var is it's own list.
-    data_entries = zip(*split_datalogger_entries(data_datalogger))
+    data_entries = unzip_dlogger_entries(split_datalogger_entries(data_datalogger), num_entries=num_entries)
 
     # TODO rename temperature 1 and 2.
     entry_names = ['Battery Voltage', 'Temperature 1', 'Temperature 2']
@@ -107,7 +124,6 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
                         data_dict[name].append('-9999')
                     else:
                         data_dict[name].append(value)
-
 
     del data_dict[key_dict['Data Logger']]
     return data_dict

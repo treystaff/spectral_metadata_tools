@@ -4,6 +4,8 @@ import re
 import os
 import shutil
 from utility import readData
+import logging
+import warnings
 
 
 def create_aux_file(data_dict, key_dict, other_keys, dataset_id, path):
@@ -42,7 +44,7 @@ def copy_otherfiles(in_dir, out_dir, filenames, scan_info):
     """Does the work of matching otherfiles and copying them to the appropriate directory"""
     img_filenames = []  # Maintain a record of image filenames for the vegfrac file
     pic_dir = os.path.join(out_dir, 'Pictures')
-    for project, date, rep, scan_number in zip(*scan_info):
+    for project, date, rep, scan_number, _ in zip(*scan_info):
         # Create a regex for matching files corresponding to this.
         pattern = '{0}_{1}_{2}_.*_.*_{3}*'.format(project, date, rep, scan_number)
         pattern = re.compile(pattern.lower())
@@ -148,18 +150,20 @@ def read_vegfraction(path):
     if header[0].lower() != 'name':
         print('Unexpected Vegfraction header from {0}!:\n{1}\n'.format(path, header))
 
+    # Define some picture suffixes
+    pic_sufs = ('.jpg', '.png', '.tif', '.bmp')
     footer = vf_data[-1]
-    if not footer[0].lower().startswith('processing'):
+    if not footer[0].lower().startswith('processing') and not footer[0].endswith(pic_sufs):
         print('Unexpected Vegfraction footer from {0}!:\n{1}\n'.format(path, footer))
 
-    if footer[0].endswith(('.jpg', '.png', '.tif', '.bmp')):
+    if footer[0].endswith(pic_sufs):
         footer = None
         data = vf_data[1:]
     else:
         data = vf_data[1:-1]
 
     # Make sure the data is formatted as expected. Raise error otherwise
-    if not data[0][0].endswith(('.jpg', '.png', '.tif', '.bmp')):
+    if not data[0][0].endswith(()):
         raise RuntimeError('Vegfraction data {0} not formatted as expected! '
                            'First element is not image filename!'.format(path))
 
@@ -209,7 +213,12 @@ def read_log(path):
     if 'CDAP LOG for' not in header[0]:
         print('Unexpected CDAP LOG header {0} in {1}!!'.format(header, path))
 
-    data = log[1:]
+    if 'Time' in log[1]:
+        # Add second headerline to log
+        header = [header, log[1]]
+        data = log[1:]
+    else:
+        data = log[2:]
 
     return header, data
 
@@ -222,9 +231,7 @@ def process_logfile(logdata, scans_info, out_dir):
     header, data = logdata
 
     # Split out the scan info
-    projects, dates, reps, scan_nums = scans_info
-    projects = [p.lower() for p in projects]
-    reps = [r.lower() for r in reps]
+    projects, _, _, _, _ = scans_info
 
     # Create a new file for the log
     outpath = os.path.join(out_dir, 'log.csv')
@@ -234,35 +241,45 @@ def process_logfile(logdata, scans_info, out_dir):
 
         writer = csv.writer(newlog)
         # Write the header
-        writer.writerow(header)
+        for row in header:
+            writer.writerow(row)
 
         # Now write every other row
         for row in data:
-            if 'camera' in row[-1].lower():
-                import pdb
-                pdb.set_trace()
             # Don't include rows indicating where program started, for now.
             if len(row) < 6:
                 continue
 
-            # Skip entries that don't match the project/rep/scan number combos for this directory
-            if row[1].lower() not in projects:
-                continue
-            if row[2].lower() not in reps:
-                continue
-            if row[5] not in scan_nums:
-                continue
+            for project, date, rep, scan_num, end_time in zip(*scans_info):
+                # May not want BLMV...but make sure compatable for now.
+                #   Have to make special case bc for some reason MV are sometimes swiched
+                #   (e.g., BLMV == BLVM)
+                if row[1].lower() in {'blmv', 'blvm'} and project.lower() in {'blmv', 'blvm'}:
+                    row[1] = 'blmv'
+                    project = 'blmv'
 
-            # Write rows that get thru!
-            writer.writerow(row)
-            rowcount += 1
+                if row[5] != scan_num:
+                    continue
+
+                if row[1].lower() != project.lower() or row[2].lower() != rep.lower():
+                    # As a fallback, check if logtime == scan end time. If so, can write, otherwise continue.
+                    if row[0] != end_time:
+                        continue
+
+                writer.writerow(row)
+                rowcount += 1
+                break
 
     if rowcount == 0:
-        # this should raise an exception because every scan should have a log entry
-        raise RuntimeError('NO MATCHING LOG ENTRIES WERE FOUND FOR {0}'.format(out_dir))
+        # this should raise an exception because every scan should have a log entry. Going to log and warn for now tho
+        # raise RuntimeError('NO MATCHING LOG ENTRIES WERE FOUND FOR {0}'.format(out_dir))
+        warn_str = 'NO MATCHING LOG ENTRIES WERE FOUND FOR {0}'.format(out_dir)
+        logging.warning(warn_str)
+        warnings.warn(warn_str)
+
     elif rowcount != len(projects):
-        import pdb
-        pdb.set_trace()
-        raise RuntimeError('Inconsistent numbers of scan and log entries for {0} !'.format(out_dir))
+        warn_str = 'Inconsistent numbers of scan and log entries for {0} !'.format(out_dir)
+        logging.warning(warn_str)
+        warnings.warn(warn_str)
 
 

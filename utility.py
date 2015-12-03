@@ -5,6 +5,10 @@ from matplotlib import rcParams
 import csv
 import simplekml
 import os
+import warnings
+import logging
+import metadata as meta
+import shutil
 
 
 def filter_floats(l, convert=True, remove_val=-9999):
@@ -144,7 +148,7 @@ def split_by_idxs(data, idxs):
                 try:
                     selected_data[idx].append(row[idx2])
                 except IndexError:
-                     selected_data[idx].append('')
+                    selected_data[idx].append('')
 
     return selected_data
 
@@ -251,19 +255,27 @@ def get_instrument_info(instrument_str):
     return instrument_name, snumber, fov
 
 
-def find_cal_reps(reps):
+def find_cal_reps(reps, filenames):
     """
     Finds and returns the index position of cal scans
 
     Parameters:
         reps - List of rep names
+        filenames - list of rep filenames (e.g., *.calibration, *.upwelling, *.downwelling, etc.)
 
     Returns:
         idxs - A set of index positions for cal scans. If no cal scans are found, returns an empty list.
     """
     idxs = []
-    for idx, rep in enumerate(reps):
-        if 'cal' in rep.lower() or 'panel' in rep.lower():
+    for idx, filename in enumerate(filenames):
+        if '.cal' in filename.lower():
+            if 'cal' not in reps[idx].lower() and 'panel' not in reps[idx].lower():
+                # Calibration scan not labeled as such. Issue a warning
+                warn_str = 'Cal rep from {0} mislabeled as {1}'.format(filename, reps[idx])
+                logging.warning(warn_str)
+                warnings.warn(warn_str)
+
+            # As long as it's marked as cal in filename, add it to the list of cal reps.
             idxs.append(idx + 1)
 
     return set(idxs)
@@ -285,8 +297,10 @@ def reps_to_targets(reps):
         rep = rep.lower()
         if rep.find('corn') > -1:
             targets.append('Corn')
-        elif rep.find('soy') > -1 or rep.find('bean') > -1:
+        elif rep.find('soy') > -1:
             targets.append('Soybean')
+        elif rep.find('bean') > -1:
+            targets.append('Great Northern Beans')
         elif rep in {'water', 'clearwater'}:
             targets.append('Water')
         elif rep in {'soil', 'baresoil'}:
@@ -536,7 +550,9 @@ def determine_loc(lats,lons, project):
         elif project.find('mead') > -1 or project.find('csp') > -1 or project.find('cps') > -1:
             location = 'MEAD'
         else:
-            print('Project {0} location not determined!'.format(project))
+            warn_str = 'Project {0} location not determined!'.format(project)
+            logging.warn(warn_str)
+            warnings.warn(warn_str)
             return None, None, None, None
 
     return location, 'United States', 'Nebraska', 'Saunders'
@@ -579,3 +595,44 @@ def plot_scans(prep, prep_data,vheader, scanidx,saveto=None):
 
     plt.cla()
     plt.close(fig)
+
+
+def create_dataset_dirs(base_dir, current_dataset_id):
+    '''
+    Function to facilitate creation of sub-directories for datasets.
+    This function is called when a dataset being processed encounters a restructured dataset with the same date
+    and location. They may be separate collections or duplicates. If separate collections, we want to make sure to
+    save data from each! Otherwise thrown an error or something.
+
+    Parameters:
+        base_dir - path to directory containing the already existing dataset that conflicts with the current dataset.
+        current_dataset_id - String. The dataset id of the dataset currently being processed.
+
+    Returns:
+        new_dir - path to the new directory the dataset currently being processed will reside within.
+    '''
+    # Read metadata from existing dataset
+    metadata = meta.read_metadata(os.path.join(base_dir, 'Metadata.csv'))
+    # Get the dataset id from the existing dataset
+    existing_dataset_id = metadata['Dataset ID']
+
+    # Ensure current dataset id != existing dataset id
+    if existing_dataset_id == current_dataset_id:
+        raise RuntimeError('DUPLICATE DATASETS DETECTED IN '
+                           '{0}. DATASET ID {1}'.format(base_dir, existing_dataset_id))
+
+    # Move the current contents of directory to the new, dataset id based directory.
+    new_existing_dir = os.path.join(base_dir, existing_dataset_id.replace(':', ''))
+    dirlist = os.listdir(base_dir)
+    os.makedirs(new_existing_dir)
+    for element in dirlist:
+        shutil.move(os.path.join(base_dir, element),
+                    os.path.join(new_existing_dir, element))
+
+    # Define a new location directory using the current dataset id.
+    #   For now, also replaece the :'s between timestamp elements with nothing.
+    new_dir = os.path.join(base_dir, current_dataset_id.replace(':', ''))
+    # Make the directory.
+    os.makedirs(new_dir)
+
+    return new_dir
