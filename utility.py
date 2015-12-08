@@ -92,39 +92,65 @@ def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, k
                              os.path.join(loc_dir, 'Raw_{0}_data.csv'.format(data_type)))
 
 
-def standardize_project_name(data_dict, key_dict):
+def standardize_project_name(project_name, location_name):
     """
     Standardizes Carbon Plot project names.
 
     Parameters:
-        data_dict - CDAP derived data dictionary
-        key_dict - Keyword-mapping dictionary
+        project_name - String. A scan's project name.
+        location_name - String. A scan's location name.
 
     Returns:
-        Modified verison of data_dict
+        String. Modified verison of project_name.
     """
 
-    project_names = data_dict[key_dict['Project']]
-    for idx, project_name in enumerate(project_names):
-        project_name = project_name.lower()
+    project_name = project_name.lower()
+    if location_name == 'CSP01':
         if project_name in {'csp01', 'cspg01', 'csp1', 'cspo1', 'cps01', 'carbon1'}:
-            project_names[idx] = 'CSP01'
-        elif project_name in {'csp02', 'cspg02', 'csp2', 'cspo2', 'cps02', 'carbon2'}:
-            project_names[idx] = 'CSP02'
-        elif project_name in {'csp03', 'cspg03', 'csp3', 'cspo3', 'carbon3', 'cps03', 'carbon3'}:
-            project_names[idx] = 'CSP03'
-        elif project_name in {'csp03a', 'cspo3a', 'cspg03a', 'carbon3a'}:
-            project_names[idx] = 'CSP03A'
-        elif project_name in {'bidirectionalcsp01', 'csp1brdf'}:
-            project_names[idx] = 'CSP01_BDRF'
-        elif project_name in {'bidirectionalcsp02', 'csp2brdf'}:
-            project_names[idx] = 'CSP02_BDRF'
-        elif project_name in {'bidirectionalcsp03', 'csp3brdf'}:
-            project_names[idx] = 'CSP03_BDRF'
+            project_name = 'CSP01'
+        elif project_name in {'bidirectionalcsp01', 'csp1brdf', 'bi-directional', 'bidirectional2'}:
+            project_name = 'CSP01_BDRF'
+        else:
+            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            project_name = 'CSP01'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
 
-    data_dict[key_dict['Project']] = project_names
+    elif location_name == 'CSP02':
+        if project_name in {'csp02', 'cspg02', 'csp2', 'cspo2', 'cps02', 'carbon2'}:
+            project_name = 'CSP02'
 
-    return data_dict
+        elif project_name in {'bidirectionalcsp02', 'csp2brdf', 'bi-directional', 'bidirectional2'}:
+            project_name = 'CSP02_BDRF'
+
+        else:
+            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            project_name = 'CSP02'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
+
+    elif location_name == 'CSP03':
+        if project_name in {'csp03', 'cspg03', 'csp3', 'cspo3', 'carbon3', 'cps03', 'carbon3'}:
+            project_name = 'CSP03'
+        elif project_name in {'bidirectionalcsp03', 'csp3brdf', 'bi-directional', 'bidirectional2'}:
+            project_name = 'CSP03_BDRF'
+        else:
+            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            project_name = 'CSP03'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
+
+    elif location_name == 'CSP03A':
+        if project_name in {'csp03a', 'cspo3a', 'cspg03a', 'carbon3a'}:
+            project_name = 'CSP03A'
+        else:
+            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            project_name = 'CSP03A'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
+
+    # If none of the above conditions are met, the location is unknown. Just return the project name.
+    return project_name
 
 
 def split_by_idxs(data, idxs):
@@ -279,6 +305,31 @@ def find_cal_reps(reps, filenames):
             idxs.append(idx + 1)
 
     return set(idxs)
+
+
+def is_cal_rep(rep, filename):
+    """
+    Determines if a given rep/filename combo represent a cal scan.
+
+    Parameters:
+        rep - String. Rep Name
+        filename - String. Name of scan's filename (e.g., *.calibration, *.upwelling, *.downwelling, etc.)
+
+    Returns:
+        True/False - Boolean. True if rep/filename combo is a cal rep
+    """
+
+    if '.cal' in filename.lower():
+        if 'cal' not in rep.lower() and 'panel' not in rep.lower():
+            # Calibration scan not labeled as such. Issue a warning
+            warn_str = 'Cal rep from {0} mislabeled as {1}'.format(filename, rep)
+            logging.warning(warn_str)
+            warnings.warn(warn_str)
+
+        # As long as it's marked as cal in filename, add it to the list of cal reps.
+        return True
+
+    return False
 
 
 def reps_to_targets(reps):
@@ -500,14 +551,14 @@ def mean(l):
     return sum(map(float, l))/float(len(l))
 
 
-def determine_loc(lats,lons, project):
+def determine_loc(lat, lon, project):
     """
     Returns the location of data collection
 
     Parameters:
-        lats - List of latitutde values for a project
-        lons - List of longitude values for a project
-        project - name of the project
+        lat - The latitutde value for a scan
+        lon - The longitude value for a scan
+        project - name of the project. If lat/lon fails to find the location, try using project name.
 
     Return:
         location - A string. 'CSP01', 'CSP02', or 'CSP03'. If a location cannot be determined,
@@ -516,27 +567,22 @@ def determine_loc(lats,lons, project):
         state - String. State name data was collected. Currently only returns "Nebraska"
         county - String. County name data was collected. Currently only returns "Saunders"
     """
-    # Convert lats & lons to floats from strings
-    lats = [float(lat) for lat in lats if lat != '']
-    lons = [float(lon) for lon in lons if lon != '']
+    location = None
+    # Convert lat & lon to floats from strings
+    if lat != '' and lon != '':
+        lat = float(lat)
+        lon = float(lon)
 
-    # The rep has no GPS values.
-    if len(lats) < 1 or len(lons) < 1:
-        return 'UNKNOWN'
+        if (41.161607 <= lat <= 41.169437) and (-96.483063 <= lon <= -96.47315):
+            location = 'CSP01'
+        elif (41.161405 <= lat <= 41.168761) and (-96.473668 <= lon <= -96.463818):
+            location = 'CSP02'
+        elif (41.17547 <= lat <= 41.1793) and (-96.444978 <= lon <= -96.43475):
+            location = 'CSP03A'
+        elif (41.17937 <= lat <= 41.183) and (-96.44494 <= lon <= -96.43465):
+            location = 'CSP03'
 
-    # Find the mean lat/lon
-    lat = mean(lats)
-    lon = mean(lons)
-
-    if (41.161607 <= lat <= 41.169437) and (-96.483063 <= lon <= -96.47315):
-        location = 'CSP01'
-    elif (41.161405 <= lat <= 41.168761) and (-96.473668 <= lon <= -96.463818):
-        location = 'CSP02'
-    elif (41.17547 <= lat <= 41.1793) and (-96.444978 <= lon <= -96.43475):
-        location = 'CSP03A'
-    elif (41.17937 <= lat <= 41.183) and (-96.44494 <= lon <= -96.43465):
-        location = 'CSP03'
-    else:
+    if location is None:
         # Fall back on project name
         project = project.lower()
         if project in {'csp01', 'cspo1', 'csp1', 'bidirectionalcsp01', 'carbon1', 'cspg01', 'cps01'}:
@@ -550,9 +596,12 @@ def determine_loc(lats,lons, project):
         elif project.find('mead') > -1 or project.find('csp') > -1 or project.find('cps') > -1:
             location = 'MEAD'
         else:
-            warn_str = 'Project {0} location not determined!'.format(project)
-            logging.warn(warn_str)
-            warnings.warn(warn_str)
+            if project not in {'blvm', 'blmv'}:
+                # We know the BLVM/BLMV project needs to be dealt with...don't bother reporting it for now...
+                # TODO perhaps remove this check on blvm.
+                warn_str = 'Project {0} location not determined!'.format(project)
+                logging.warn(warn_str)
+                warnings.warn(warn_str)
             return None, None, None, None
 
     return location, 'United States', 'Nebraska', 'Saunders'
@@ -636,3 +685,25 @@ def create_dataset_dirs(base_dir, current_dataset_id):
     os.makedirs(new_dir)
 
     return new_dir
+
+
+def extract_col(col_idx, data):
+    '''
+    Extracts a single column from a CDAP data list
+
+    Parameters:
+        col_idx - int. The index for the column to extract
+        data - list. CDAP data list
+
+     Returns:
+        col - list. One column from the cdap data list.
+    '''
+    col = []
+    for row in data:
+        if len(row) >= 1:
+            try:
+                col.append(row[col_idx])
+            except IndexError:
+                col.append('')
+
+    return col

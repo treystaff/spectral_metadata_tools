@@ -153,9 +153,7 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     # Finally, we maintain a set of info on project names, dates, reps, and scan numbers that go along with
     #   this data so we can copy the proper files from the original directory (pics, etc.)
 
-    meta_dict['scans_info'] = [data_dict[key_dict['Project']], data_dict[key_dict['Date']],
-                               data_dict[key_dict['Replication']], data_dict[key_dict['Scan Number']],
-                               data_dict[key_dict['Stop Time']]]
+    meta_dict['scans_info'] = [data_dict['File Name'], data_dict[key_dict['Stop Time']]]
 
     return meta_dict
 

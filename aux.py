@@ -71,6 +71,29 @@ def copy_otherfiles(in_dir, out_dir, filenames, scan_info):
         return img_filenames
 
 
+def parse_scans_info(scans_info):
+    '''
+    Parses information contained in the scans_info list. Workaround and a bit of a hack...
+
+    Parameters:
+        scans_info - list. [raw_filenames, end_times]
+
+    Returns:
+        parsed_info - list. [projects, dates, reps, scan_numbers, end_times]
+    '''
+    parsed_info = [[], [], [], [], []]
+    for filename, end_time in zip(*scans_info):
+        filename = filename[:filename.find('.')]
+        project, date, rep, _, _, scan_num = filename.split('_')
+        parsed_info[0].append(project)
+        parsed_info[1].append(date)
+        parsed_info[2].append(rep)
+        parsed_info[3].append(scan_num)
+        parsed_info[4].append(end_time)
+
+    return parsed_info
+
+
 def process_otherfiles(in_dir, out_dir, cal_meta, loc_meta):
     """
     Copy appropriate pictures and raw data (.Upwelling, etc.) over to new reorganized directory.
@@ -111,22 +134,24 @@ def process_otherfiles(in_dir, out_dir, cal_meta, loc_meta):
 
     # Do the calibration stuff first
     cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
-    image_filenames = copy_otherfiles(in_dir, cal_dir, filenames, cal_meta['scans_info'])
+    scans_info = parse_scans_info(cal_meta['scans_info'])
+    image_filenames = copy_otherfiles(in_dir, cal_dir, filenames, scans_info)
     # Process vegfrac for cal data
     if vegfrac_data:
         process_vegfraction(vegfrac_data, image_filenames, cal_dir)
     if logdata:
-        process_logfile(logdata, cal_meta['scans_info'], cal_dir)
+        process_logfile(logdata, scans_info, cal_dir)
 
     # Now handle the location-specific scandata
     for loc in loc_meta:
         meta_dict = loc_meta[loc]
         loc_dir = os.path.join(out_dir, meta_dict['Date'], loc)
-        image_filenames = copy_otherfiles(in_dir, loc_dir, filenames, meta_dict['scans_info'])
+        scans_info = parse_scans_info(meta_dict['scans_info'])
+        image_filenames = copy_otherfiles(in_dir, loc_dir, filenames, scans_info)
         if vegfrac_data:
             process_vegfraction(vegfrac_data, image_filenames, loc_dir)
         if logdata:
-            process_logfile(logdata, meta_dict['scans_info'], loc_dir)
+            process_logfile(logdata, scans_info, loc_dir)
 
 
 def read_vegfraction(path):
@@ -163,7 +188,7 @@ def read_vegfraction(path):
         data = vf_data[1:-1]
 
     # Make sure the data is formatted as expected. Raise error otherwise
-    if not data[0][0].endswith(()):
+    if not data[0][0].endswith(pic_sufs):
         raise RuntimeError('Vegfraction data {0} not formatted as expected! '
                            'First element is not image filename!'.format(path))
 

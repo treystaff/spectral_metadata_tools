@@ -20,6 +20,7 @@ from aux import *
 import logging
 import time
 import traceback
+import copy
 
 
 def process_upwelling(data_dir, out_dir):
@@ -84,6 +85,10 @@ def process_upwelling(data_dir, out_dir):
     fields = getFields(data)
     # Find the scan starting idx
     scanidx = findScanIdx(fields)
+    # Create a list of just the wavelengths
+    scan_keys = fields[scanidx:]
+    # Get only those that are actual wavelength numbers
+    wavelengths = filter_floats(scan_keys)
     # Create a list of just the header keys
     hkeys = fields[0:scanidx]
 
@@ -104,70 +109,92 @@ def process_upwelling(data_dir, out_dir):
                   key.lower() not in {'reserved', 'additional data', 'lamp', 'shutter status',
                                       'battery voltage', 'scan begin & end', 'solar angles', 'unispec dc'}]
 
-    # Extract lats and lons
-    lats = data[fields.index(key_dict['Latitude'])][1:-1]
-    lons = data[fields.index(key_dict['Longitude'])][1:-1]
+    # So that each scan can be processed, we get the index position of key fields needed to determine
+    #   a scan's status (cal or not), location, and project.
+    # Get lats and lons idx position
+    lat_idx = fields.index(key_dict['Latitude'])
+    lon_idx = fields.index(key_dict['Longitude'])
+    # Get the idx of the project names
+    project_idx = fields.index(key_dict['Project'])
+    # Get the index position of rep names and filenames
+    rep_idx = fields.index(key_dict['Replication'])
+    filename_idx = fields.index('File Name')
 
-    # Process each unique project. Add the results to a location-indexed dict
-    loc_dict = dict()
-    loc_idxs = dict()
-    # Find the unique project names
-    projects = data[fields.index(key_dict['Project'])][1:-1]
-    distinct_projects = set(projects)
-    for project in distinct_projects:
-        # Find the location of each project
-        plats, p_idxs = filter_lists(lats, projects, project)
-        plons,_ = filter_lists(lons, projects, project)
+    # Create data structures that will contain relevant info
+    loc_dict = dict()  # Location-based non-calibration data.
+    loc_idxs = dict()  # Dictionary containing idxs of columns belonging to non-cal data scans indexed by location
+    cal_idxs = []  # List containing idxs of columns that have cal-data in them.
+    standard_project_names = [] # List containing the standardized project name for each scan.
 
-        location, country, state, county = determine_loc(plats, plons, project)
+    # Create a list for holding subsets of cdap data. First element of each row is a field name
+    empty_data = []   # Just call it 'empty_data' for now bc it doesn't have any data in it...
+    for row in data:
+        empty_data.append([row[0]])
+
+    # Prepare the cal data structure
+    cal_data = copy.deepcopy(empty_data)  # Just make a copy of the empty_data
+
+    # TODO can also have this separate cal scans & standardize projects & issue warning
+    # TODO just iterate over every col, instead of separating later. That way everything for a scan is available immediately.
+    num_scans = len(data[filename_idx][1:])
+    for col_idx in range(1, num_scans + 1):
+        col_data = extract_col(col_idx, data)
+
+        # Find the location of each rep
+        lat = col_data[lat_idx]
+        lon = col_data[lon_idx]
+        project = col_data[project_idx]
+        location, country, state, county = determine_loc(lat, lon, project)
         if location is None:
             location = 'Unknown'
             country = 'Unknown'
             state = 'Unknown'
             county = 'Unknown'
 
-        # Maintain a dict of the indexes that match a location.
-        if location in loc_idxs.keys():
-            loc_idxs[location].extend(p_idxs)
+        # Once we have the location, we can standardize this scan's project name.
+        col_data[project_idx] = standardize_project_name(project, location)
+        standard_project_names.append(col_data[project_idx])
+
+        # Figure out if this is a cal scan
+        rep = col_data[rep_idx]
+        filename = col_data[filename_idx]
+
+        if is_cal_rep(rep, filename):
+            cal_idxs.append(col_idx)
+
+            # Ensure the cal rep is appropriately named
+            col_data[rep_idx] = 'CAL'
+
+            # Add the column to the cal_data
+            for row_idx, row in enumerate(col_data):
+                cal_data[row_idx].append(row)
+
         else:
-            loc_idxs[location] = p_idxs
+            # Current col is not a cal scan
+            if location in loc_idxs.keys():
+                loc_idxs[location].append(col_idx)
 
-        if location in loc_dict.keys():
-            # Extend the existing data list
-            for idx, row in enumerate(data):
-                # Some rows may be empty
-                if len(row) > 1:
-                    for p_idx in p_idxs:
-                        try:
-                            loc_dict[location][idx].append(row[p_idx])
-                        except:
-                            # some rows don't span the whole document
-                            loc_dict[location][idx].append('')
-        else:
-            # Create a new entry.
-            loc_list = []
-            for idx, row in enumerate(data):
-                loc_list.append([])
-                loc_list[idx].append(row[0])
-                # Some rows may be empty.
-                if len(row) > 1:
-                    for p_idx in p_idxs:
-                        try:
-                            loc_list[idx].append(row[p_idx])
-                        except IndexError:
-                            # Some rows don't span the whole document.
-                            loc_list[idx].append('')
+                # Extend the existing data list
+                for row_idx, row in enumerate(col_data):
+                    loc_dict[location][row_idx].append(row)
+            else:
+                loc_idxs[location] = [col_idx]
 
-            loc_dict[location] = loc_list
-            del loc_list
+                # Create a new entry.
+                loc_list = copy.deepcopy(empty_data)
+                for row_idx, row in enumerate(col_data):
+                            loc_list[row_idx].append(row)
 
-    all_reps = data[fields.index(key_dict['Replication'])][1:-1]
-    all_filenames = data[fields.index('File Name')][1:-1]
-    cal_idxs = find_cal_reps(all_reps, all_filenames)
-    cal_data, _ = split_cal_scans(data, cal_idxs)
+                loc_dict[location] = loc_list
+                del loc_list
+
+
+    # Now that every scan has been processed, deal with cal data first:
+    # -----------------------------------------------------------------
+    # -------------------------cal processing--------------------------
+    # -----------------------------------------------------------------
     # Convert to dicts for ease of access
     cal_dict, cal_scans, _ = data2dict(cal_data)
-    cal_dict = standardize_project_name(cal_dict, key_dict)
 
     # Modify the datalogger entry: split datalogger values into respective fields
     if cal_dict[key_dict['Data Logger']]:
@@ -175,11 +202,6 @@ def process_upwelling(data_dir, out_dir):
 
     # Create the calibration metadata dict
     cal_meta = create_metadata_dict(cal_dict, key_dict, data_dir)
-
-    # Create a list of just the wavelengths
-    scan_keys = fields[scanidx:]
-    # Get only those that are actual wavelength numbers
-    wavelengths = filter_floats(scan_keys)
 
     # Add instrument-specific meta to cal_meta.
     cal_meta['Upwelling Instrument Max Wavelength'] = max(wavelengths)
@@ -207,7 +229,10 @@ def process_upwelling(data_dir, out_dir):
         create_aux_file(cal_dict, key_dict, other_keys, dataset_id, os.path.join(cal_dir, 'Auxiliary_Cal.csv'))
         create_scan_file(cal_dict, key_dict, cal_scans, dataset_id, os.path.join(cal_dir, '/Upwelling_Cal_data.csv'))
 
-    # Now process each location individually
+    # Now process each location-specific non-cal data
+    # -----------------------------------------------------------------
+    # -----------------------non-cal processing------------------------
+    # -----------------------------------------------------------------
     loc_meta = dict()
     for loc in loc_dict.keys():
         # Load the data for the location, and convert to a dictionary for easy-access.
@@ -223,7 +248,6 @@ def process_upwelling(data_dir, out_dir):
 
         # Convert to dicts for ease of access
         data_dict, data_scans, _ = data2dict(scan_data)
-        data_dict = standardize_project_name(data_dict, key_dict)
 
         # Modify the datalogger entry: split datalogger values into respective fields
         if data_dict[key_dict['Data Logger']]:
@@ -268,12 +292,12 @@ def process_upwelling(data_dir, out_dir):
         create_raw_scans_files(raw_upwelling_files, cal_idxs, loc_idxs, loc_meta, cal_meta,key_dict, 'Upwelling', out_dir)
 
     # Return the metadata dict and key_dict
-    return cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict
+    return cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names
 
     # TODO Also return info on location directory paths w/ loc & reps so other files can be moved.
 
 
-def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict):
+def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standardized_project_names):
     """
     Processes the upwelling file(s) in a CDAP data directory.
 
@@ -341,10 +365,12 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
     fields = getFields(data)
     scanidx = findScanIdx(fields)
 
+    # Standardize the project names
+    data[fields.index(key_dict['Project'])][1:] = standardized_project_names
+
     # Deal with cal data first
     cal_data, _ = split_cal_scans(data, cal_idxs)
     cal_dict, cal_scans, _ = data2dict(cal_data)
-    cal_dict = standardize_project_name(cal_dict, key_dict)
 
     cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
     dataset_id = cal_meta['Dataset ID']
@@ -384,7 +410,6 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
 
         # Create the data dicts
         data_dict, data_scans, _ = data2dict(scan_data)
-        data_dict = standardize_project_name(data_dict, key_dict)
 
         # Save the scandata files
         loc_dir = os.path.join(out_dir, data_dict[key_dict['Date']][0], loc)
@@ -409,7 +434,7 @@ def process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
         create_metadata_file(loc_meta[loc], os.path.join(loc_dir, 'Metadata.csv'))
 
 
-def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict):
+def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standardized_project_names):
     # Find CDAP downwelling files in the data directory
     ref_pattern = r'^Reflectance.*\.txt'
     ref_files = [f for f in os.listdir(data_dir) if re.search(ref_pattern, f)]
@@ -430,11 +455,13 @@ def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
                 del odata
 
         fields = getFields(data)
+        # Standardize the project names
+        data[fields.index(key_dict['Project'])][1:] = standardized_project_names
 
         # Deal with cal data first.
         cal_data, _ = split_cal_scans(data, cal_idxs)
         cal_dict, cal_scans, _ = data2dict(cal_data)
-        cal_dict = standardize_project_name(cal_dict, key_dict)
+
         dataset_id = cal_meta['Dataset ID']
         cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
         if cal_dict[key_dict['Replication']]:
@@ -454,7 +481,6 @@ def process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_met
 
             # Create the data dicts
             data_dict, data_scans, _ = data2dict(scan_data)
-            data_dict = standardize_project_name(data_dict, key_dict)
 
             # Save the scandata files
             loc_dir = os.path.join(out_dir, data_dict[key_dict['Date']][0], loc)
@@ -478,10 +504,10 @@ def test_split():
                         format='%(levelname)s: %(message)s', level=logging.DEBUG)
 
     try:
-        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(data_dir, out_dir)
+        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names = process_upwelling(data_dir, out_dir)
         process_otherfiles(data_dir, out_dir, cal_meta, loc_meta)
-        process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
-        process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+        process_downwelling(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names)
+        process_reflectance(data_dir, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names)
     finally:
         logging.shutdown()
 
@@ -510,13 +536,13 @@ def process_years(years):
                 # Only process the directory if it contains upwelling data.
                 if [f for f in files if upPattern.match(f) or outPattern.match(f)]:
                     try:
-                        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict = process_upwelling(root, out_dir)
+                        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names = process_upwelling(root, out_dir)
                         process_otherfiles(root, out_dir, cal_meta, loc_meta)
                         if cal_idxs is None:
                             print('Problem with {0} !'.format(root))
                         else:
-                            process_downwelling(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
-                            process_reflectance(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict)
+                            process_downwelling(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names)
+                            process_reflectance(root, out_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names)
 
                     except Exception, e:
                         problem_str = 'PROBLEM PROCESSING {0}! Exception:\n {1} \n'\
@@ -526,4 +552,4 @@ def process_years(years):
                         logging.error(problem_str)
                         warnings.warn(problem_str)
 
-        logging.shutdown()
+    logging.shutdown()

@@ -57,11 +57,17 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
         data_dict, key_dict - Modified dictionaries.
     """
     data_datalogger = data_dict[key_dict['Data Logger']]
+    num_entries = None
     for data_str in data_datalogger:
         split_entry = split_datalogger_entry(data_str)
         if data_str != '':
             num_entries = len(split_entry)
             break
+
+    # If no entries were found, just remove the datalogger field alltogether and move on
+    if num_entries is None:
+        del data_dict[key_dict['Data Logger']]
+        return data_dict
 
     # Split out all of the data from the datalogger strings. Each var is it's own list.
     data_entries = unzip_dlogger_entries(split_datalogger_entries(data_datalogger), num_entries=num_entries)
