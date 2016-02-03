@@ -3,9 +3,11 @@ import csv
 import re
 import os
 import shutil
-from utility import readData
+from utility import readData, filter_floats
 import logging
 import warnings
+from datetime import datetime, timedelta
+import xlrd
 
 
 def create_aux_file(data_dict, key_dict, other_keys, dataset_id, path):
@@ -51,7 +53,7 @@ def copy_otherfiles(in_dir, out_dir, filenames, scan_info):
         for filename in filenames:
             if pattern.match(filename.lower()):
                 # Copy the file to the new directory
-                if filename.lower().endswith(('.jpg', '.png', '.tif', '.bmp')):
+                if filename.lower().endswith(('.jpg', '.png', '.tif', '.bmp', '.tiff')):
                     # Copy to pictures dir
                     # Check that the Pictures directory exists
                     if not os.path.exists(pic_dir):
@@ -68,7 +70,7 @@ def copy_otherfiles(in_dir, out_dir, filenames, scan_info):
                     shutil.copy2(os.path.join(in_dir, filename),
                                     out_dir)
 
-        return img_filenames
+    return img_filenames
 
 
 def parse_scans_info(scans_info):
@@ -94,7 +96,7 @@ def parse_scans_info(scans_info):
     return parsed_info
 
 
-def process_otherfiles(in_dir, out_dir, cal_meta, loc_meta):
+def process_otherfiles(in_dir, cal_meta, loc_meta):
     """
     Copy appropriate pictures and raw data (.Upwelling, etc.) over to new reorganized directory.
 
@@ -113,7 +115,8 @@ def process_otherfiles(in_dir, out_dir, cal_meta, loc_meta):
     filenames = os.walk(in_dir).next()[2]
 
     # Check if a vegfraction file exists. If so, read the data.
-    vegfrac_fn = [f for f in filenames if 'veg' in f.lower() and 'fraction' in f.lower()]
+    vegfrac_fn = [f for f in filenames if f.lower() == 'vegfraction.txt']
+    #vegfrac_fn = [f for f in filenames if 'veg' in f.lower() and 'fraction' in f.lower() and f.endswith('.txt')]
     if len(vegfrac_fn) == 1:
         vegfrac_data = read_vegfraction(os.path.join(in_dir, vegfrac_fn[0]))
     elif len(vegfrac_fn) > 1:
@@ -122,18 +125,28 @@ def process_otherfiles(in_dir, out_dir, cal_meta, loc_meta):
         vegfrac_data = False
 
     # Check if a log file exists. if so, read the data.
-    logfile = [f for f in filenames if '_log.txt' in f.lower()]
+    logfile = [f for f in filenames if '_log.txt' in f.lower() or '_log.xls' in f.lower()]
     if len(logfile) == 1:
-        logdata = read_log(os.path.join(in_dir, logfile[0]))
+        if logfile[0].endswith('.xls'):
+            # Special handling for .xls logfiles because they only occur in two years worth of data and are
+            #   badly inconsistent
+            logdata = read_xls_log(os.path.join(in_dir, logfile[0]))
+            process_xls_logfile(logdata, cal_meta, loc_meta)
+            logdata = None
+        else:
+            logdata = read_log(os.path.join(in_dir, logfile[0]))
     elif len(logfile) > 1:
         raise RuntimeError('MULTIPLE LOGFILES FOUND IN {0}'.format(in_dir))
     elif len(logfile) == 0:
-        raise RuntimeError('NO LOGFILE FOUND IN {0}'.format(in_dir))
+        warnstr = 'NO LOGFILE FOUND IN {0}'.format(in_dir)
+        warnings.warn(warnstr)
+        logging.warning(warnstr)
+        logdata = False
     else:
         logdata = False
 
     # Do the calibration stuff first
-    cal_dir = os.path.join(out_dir, cal_meta['Date'], 'cal_data')
+    cal_dir = cal_meta['out_dir']
     scans_info = parse_scans_info(cal_meta['scans_info'])
     image_filenames = copy_otherfiles(in_dir, cal_dir, filenames, scans_info)
     # Process vegfrac for cal data
@@ -145,7 +158,7 @@ def process_otherfiles(in_dir, out_dir, cal_meta, loc_meta):
     # Now handle the location-specific scandata
     for loc in loc_meta:
         meta_dict = loc_meta[loc]
-        loc_dir = os.path.join(out_dir, meta_dict['Date'], loc)
+        loc_dir = meta_dict['out_dir']
         scans_info = parse_scans_info(meta_dict['scans_info'])
         image_filenames = copy_otherfiles(in_dir, loc_dir, filenames, scans_info)
         if vegfrac_data:
@@ -178,17 +191,19 @@ def read_vegfraction(path):
     # Define some picture suffixes
     pic_sufs = ('.jpg', '.png', '.tif', '.bmp')
     footer = vf_data[-1]
-    if not footer[0].lower().startswith('processing') and not footer[0].endswith(pic_sufs):
+    if not footer[0].lower().startswith('processing') and not footer[0].lower().endswith(pic_sufs):
         print('Unexpected Vegfraction footer from {0}!:\n{1}\n'.format(path, footer))
 
-    if footer[0].endswith(pic_sufs):
+    if footer[0].lower().endswith(pic_sufs):
         footer = None
         data = vf_data[1:]
     else:
         data = vf_data[1:-1]
 
     # Make sure the data is formatted as expected. Raise error otherwise
-    if not data[0][0].endswith(pic_sufs):
+    if not data[0][0].lower().endswith(pic_sufs):
+        import pdb
+        pdb.set_trace()
         raise RuntimeError('Vegfraction data {0} not formatted as expected! '
                            'First element is not image filename!'.format(path))
 
@@ -248,6 +263,160 @@ def read_log(path):
     return header, data
 
 
+def read_xls_log(path):
+    """
+    Reads a log file in .xls format. Years 2002-2003 have logs formatted this way.
+
+    Returns:
+        header, data
+    """
+    # Open the excel workbook and extract the first sheet (which contains the data)
+    book = xlrd.open_workbook(path)
+    sheet = book.sheet_by_index(0)
+
+    # Create a data dictionary that will hold location-specific data
+    data = {}
+
+    # Create the header obj
+    header = []
+
+    cur_loc = None
+    cur_plot = None
+
+    # Iterate over the rows
+    for row_idx in range(sheet.nrows):
+        row = sheet.row(row_idx)
+        row = [element.value for element in row]
+
+        if all(element == '' for element in row):
+            continue
+
+        if str(row[0]) == 'Plot' or str(row[0]).startswith('Data collection log'):
+            header.append(row)
+
+        if str(row[0]).startswith('CSP'):
+            # Indicates start of a location.
+            data[row[0]] = [row, {}]
+            cur_loc = row[0]
+            continue
+
+        if str(row[0]).startswith('Plot') and len(str(row[0])) > 4:
+            # Determine what plot number it is and make naming consistent.
+            plot_nums = filter_floats(row[0])
+            if len(plot_nums) != 0:
+                cur_plot = 'Plot '
+                for num in plot_nums:
+                    cur_plot += str(int(num))
+
+                row[0] = cur_plot
+
+        if cur_loc and cur_plot:
+            if cur_plot not in data[cur_loc][1].keys():
+                data[cur_loc][1][cur_plot] = [row]
+            else:
+                data[cur_loc][1][cur_plot].append(row)
+
+    return header, data
+
+
+def process_xls_logfile(logdata, cal_meta, loc_meta):
+    """
+    Process the CDAP xls logfile
+    """
+    header, data = logdata
+    cal_logs = []
+
+    scan_num_idx = None
+
+    cal_dir = cal_meta['out_dir']
+
+    for loc in loc_meta:
+        # Only process entries for which we have the location in the data....
+        if loc not in data.keys():
+            warnings.warn('Location {0} Not found in logfile'.format(loc))
+            continue
+
+        # Extract location-specific metadata and what scannumbers are associated with it
+        meta_dict = loc_meta[loc]
+        _, _, _, scan_numbers, _ = parse_scans_info(meta_dict['scans_info'])
+        scan_numbers = filter_floats(scan_numbers)
+
+        # Obtain the output dir
+        loc_dir = meta_dict['out_dir']
+
+        # Extract the log data for the location
+        loc_info, logdata = data[loc]
+
+        # Get the plots for the location from the logdata
+        plots = logdata.keys()
+        plots.sort()
+
+        # Create a temp list to hold loc-based logdata.
+        loc_log = []
+
+        # Iterate through each row, determining if loc-scan, cal scan, or neither
+        for plot in plots:
+            plotdata = logdata[plot]
+            loc_log.append([plot])
+
+            for row in plotdata:
+                if str(row[0]).startswith('Plot'):
+                    continue
+                # Try to figure out which row the scan numbers are on.
+                if not scan_num_idx:
+                    if row[0] == '':
+                        try:
+                            int(row[2])
+                            scan_num_idx = 2
+                        except ValueError:
+                            raise RuntimeError('ENCOUNTERED UNEXPECTED XLS LOG FORMATTING IN {0}'
+                                               .format(meta_dict['Legacy Path']))
+                    else:
+                        try:
+                            int(row[0])
+                            int(row[1])
+                            scan_num_idx = 1
+                        except ValueError:
+                            raise RuntimeError('ENCOUNTERED UNEXPECTED XLS LOG FORMATTING IN {0}'
+                                               .format(meta_dict['Legacy Path']))
+
+                if row[scan_num_idx] in scan_numbers:
+                    if any('cal' in str(element).lower() for element in row):
+                        warnings.warn('Possible cal scan log in non-cal scan numbers')
+                    loc_log.append(row)
+
+                elif any('cal' in str(element).lower() for element in row):
+                    # Call it a cal scan
+                    cal_logs.append(row)
+
+        # Now create the loc logfile
+        with open(os.path.join(loc_dir, 'log.csv'), 'w') as logfile:
+            writer = csv.writer(logfile)
+
+            # Write the header
+            for row in header:
+                writer.writerow(row)
+
+
+            # Write the location info
+            writer.writerow(loc_info)
+
+            # Write the other rows
+            for row in loc_log:
+                writer.writerow(row)
+
+    # now create the cal logfile
+    with open(os.path.join(cal_dir, 'log.csv'), 'w') as logfile:
+        writer = csv.writer(logfile)
+        # Write the header
+        for row in header:
+            writer.writerow(row)
+
+        # Write the other rows
+        for row in cal_logs:
+            writer.writerow(row)
+
+
 def process_logfile(logdata, scans_info, out_dir):
     """
     Process the CDAP logfile.
@@ -266,8 +435,11 @@ def process_logfile(logdata, scans_info, out_dir):
 
         writer = csv.writer(newlog)
         # Write the header
-        for row in header:
-            writer.writerow(row)
+        if len(header) > 1:
+            for row in header:
+                writer.writerow(row)
+        else:
+            writer.writerow(header)
 
         # Now write every other row
         for row in data:
@@ -283,12 +455,29 @@ def process_logfile(logdata, scans_info, out_dir):
                     row[1] = 'blmv'
                     project = 'blmv'
 
+                # Special case for soybean. Seems to be a recurring problem
+                if row[2].lower() in {'soy', 'soybean'} and rep.lower() in {'soy', 'soybean'}:
+                    row[2] = 'soybean'
+                    rep = 'soybean'
+
                 if row[5] != scan_num:
                     continue
 
                 if row[1].lower() != project.lower() or row[2].lower() != rep.lower():
-                    # As a fallback, check if logtime == scan end time. If so, can write, otherwise continue.
-                    if row[0] != end_time:
+                    # As a fallback, check if logtime is within a couple seconds of scan end time.
+                    #   If so, can write, otherwise continue.
+                    try:
+                        logtime = datetime.strptime(row[0], '%H:%M:%S')
+                        end_time = datetime.strptime(end_time, '%H:%M:%S')
+                    except ValueError:
+                        # If the time is malformed for the log or data file, just continue.
+                        continue
+
+                    if logtime < end_time - timedelta(0, 1):
+                        # If the logged time is less than a second before the end time, discard.
+                        continue
+                    if logtime > end_time + timedelta(0, 2):
+                        # If the logged time is greater than two seconds after the end time, discard.
                         continue
 
                 writer.writerow(row)
@@ -303,8 +492,9 @@ def process_logfile(logdata, scans_info, out_dir):
         warnings.warn(warn_str)
 
     elif rowcount != len(projects):
-        warn_str = 'Inconsistent numbers of scan and log entries for {0} !'.format(out_dir)
+        warn_str = 'Inconsistent numbers of scans ({0}) and ' \
+                   'log entries ({1}) for {2} !'.format(len(projects), rowcount, out_dir)
         logging.warning(warn_str)
         warnings.warn(warn_str)
 
-
+    # TODO: if rowcount > #scans, reprocess to remove those that don't match

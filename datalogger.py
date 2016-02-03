@@ -99,6 +99,8 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
 
     else:
         # TODO Implement other datalogger types (if there are any others...)
+        import pdb
+        pdb.set_trace()
         raise NotImplementedError('Unrecognized Datalogger string. Sorry!')
 
     # Create an entry in the data and cal dicts for the split datalogger data.

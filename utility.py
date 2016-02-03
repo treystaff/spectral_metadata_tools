@@ -38,7 +38,7 @@ def filter_floats(l, convert=True, remove_val=-9999):
     return filtered
 
 
-def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, data_type, out_dir):
+def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, data_type):
     """
     Creates a raw scans file
     """
@@ -50,8 +50,8 @@ def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, k
     for file_path in file_paths:
         if first:
             data = readData(file_path)
-        else:
             first = False
+        else:
             odata = readData(file_path)
             for idx, row in enumerate(odata):
                 data[idx].extend(row[1:-1])
@@ -61,30 +61,23 @@ def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, k
     fields = getFields(data)
 
     # Deal with the cal data
-    cal_data, _ = split_cal_scans(data, cal_idxs)
+    cal_data = split_by_idxs(data, cal_idxs)
     cal_dict, cal_scans, _ = data2dict(cal_data)
-
-    cal_dir = os.path.join(out_dir, cal_dict[key_dict['Date']][0], 'cal_data')
+    cal_dir = cal_meta['out_dir']
     dataset_id = cal_meta['Dataset ID']
     if cal_dict[key_dict['Replication']]:
         create_scan_file(cal_dict, key_dict, cal_scans, dataset_id,
                         os.path.join(cal_dir, 'Raw_{0}_Cal_data.csv'.format(data_type)))
 
-    # Split the data into locations ( for non-cal data)
+    # Split the data into locations (for non-cal data)
     for loc in loc_idxs.keys():
         loc_data = split_by_idxs(data, loc_idxs[loc])
 
-        reps = loc_data[fields.index(key_dict['Replication'])][1:-1]
-        loc_cal_idxs = find_cal_reps(reps)
-
-        # Now split each location's data into scan and cal data.
-        _, scan_data = split_cal_scans(loc_data, loc_cal_idxs)
-
         # Create the data dicts
-        data_dict, data_scans, _ = data2dict(scan_data)
+        data_dict, data_scans, _ = data2dict(loc_data)
 
         # Save the scandata files
-        loc_dir = os.path.join(out_dir,data_dict[key_dict['Date']][0], loc)
+        loc_dir = loc_meta[loc]['out_dir']
         dataset_id = loc_meta[loc]['Dataset ID']
 
         if data_dict[key_dict['Replication']]:
@@ -103,49 +96,99 @@ def standardize_project_name(project_name, location_name):
     Returns:
         String. Modified verison of project_name.
     """
+    # Define some lists with common project names
+    csp01_list = ['csp01', 'cspg01', 'csp1', 'cspo1', 'cps01', 'carbon1']
+    csp02_list = ['csp02', 'cspg02', 'csp2', 'cspo2', 'cps02', 'carbon2']
+    csp03_list = ['csp03', 'cspg03', 'csp3', 'cspo3', 'carbon3', 'cps03', 'carbon3']
+    csp03a_list = ['csp03a', 'cspo3a', 'cspg03a', 'carbon3a', 'csp03']
+    all_csp_names = []
+    all_csp_names.extend(csp01_list)
+    all_csp_names.extend(csp02_list)
+    all_csp_names.extend(csp03_list)
+    all_csp_names.extend(csp03a_list)
 
     project_name = project_name.lower()
     if location_name == 'CSP01':
-        if project_name in {'csp01', 'cspg01', 'csp1', 'cspo1', 'cps01', 'carbon1'}:
+        if project_name in csp01_list:
             project_name = 'CSP01'
         elif project_name in {'bidirectionalcsp01', 'csp1brdf', 'bi-directional', 'bidirectional2'}:
-            project_name = 'CSP01_BDRF'
-        else:
-            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            if project_name == 'bidirectional2':
+                project_name = 'CSP01_BDRF2'
+            else:
+                project_name = 'CSP01_BDRF'
+        elif project_name in all_csp_names:
+            warn_str = 'Project name {0} does not match detected location {1}. ' \
+                       'Renaming to {1}'.format(project_name, location_name)
             project_name = 'CSP01'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
+        else:
+            new_project_name = 'CSP01_{0}'.format(project_name)
+            warn_str = 'Project name {0} does not match location {1}! Renaming to {2}'\
+                .format(project_name, location_name, new_project_name)
+            project_name = new_project_name
             warnings.warn(warn_str)
             logging.warning(warn_str)
 
     elif location_name == 'CSP02':
-        if project_name in {'csp02', 'cspg02', 'csp2', 'cspo2', 'cps02', 'carbon2'}:
+        if project_name in csp02_list:
             project_name = 'CSP02'
 
         elif project_name in {'bidirectionalcsp02', 'csp2brdf', 'bi-directional', 'bidirectional2'}:
-            project_name = 'CSP02_BDRF'
-
-        else:
-            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            if project_name == 'bidirectional2':
+                project_name = 'CSP02_BDRF2'
+            else:
+                project_name = 'CSP02_BDRF'
+        elif project_name in all_csp_names:
+            warn_str = 'Project name {0} does not match detected location {1}. ' \
+                       'Renaming to {1}'.format(project_name, location_name)
             project_name = 'CSP02'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
+        else:
+            new_project_name = 'CSP02_{0}'.format(project_name)
+            warn_str = 'Project name {0} does not match location {1}! Renaming to {2}'\
+                .format(project_name, location_name, new_project_name)
+            project_name = new_project_name
+
             warnings.warn(warn_str)
             logging.warning(warn_str)
 
     elif location_name == 'CSP03':
-        if project_name in {'csp03', 'cspg03', 'csp3', 'cspo3', 'carbon3', 'cps03', 'carbon3'}:
+        if project_name in csp03_list:
             project_name = 'CSP03'
         elif project_name in {'bidirectionalcsp03', 'csp3brdf', 'bi-directional', 'bidirectional2'}:
-            project_name = 'CSP03_BDRF'
-        else:
-            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
+            if project_name == 'bidirectional2':
+                project_name = 'CSP03_BDRF2'
+            else:
+                project_name = 'CSP03_BDRF'
+        elif project_name in all_csp_names:
+            warn_str = 'Project name {0} does not match detected location {1}. ' \
+                       'Renaming to {1}'.format(project_name, location_name)
             project_name = 'CSP03'
             warnings.warn(warn_str)
             logging.warning(warn_str)
+        else:
+            new_project_name = 'CSP03_{0}'.format(project_name)
+            warn_str = 'Project name {0} does not match location {1}! Renaming to {2}'\
+                .format(project_name, location_name, new_project_name)
+            project_name = new_project_name
+            logging.warning(warn_str)
 
     elif location_name == 'CSP03A':
-        if project_name in {'csp03a', 'cspo3a', 'cspg03a', 'carbon3a'}:
+        if project_name in csp03a_list:
             project_name = 'CSP03A'
+        elif project_name in all_csp_names:
+            warn_str = 'Project name {0} does not match detected location {1}. ' \
+                       'Renaming to {1}'.format(project_name, location_name)
+            project_name = 'CSP03A'
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
         else:
-            warn_str = 'Project name {0} does not match location {1}!'.format(project_name, location_name)
-            project_name = 'CSP03A'
+            new_project_name = 'CSP03A_{0}'.format(project_name)
+            warn_str = 'Project name {0} does not match location {1}! Renaming to {2}'\
+                .format(project_name, location_name, new_project_name)
+            project_name = new_project_name
             warnings.warn(warn_str)
             logging.warning(warn_str)
 
@@ -225,7 +268,6 @@ def create_scan_file(data_dict, key_dict, scan_data, dataset_id, path):
                 row.extend(data_dict[key_dict[element]])
                 write.writerow(row)
 
-        # Now add the scandata
         for row in scan_data:
             write.writerow(row)
 
@@ -319,7 +361,7 @@ def is_cal_rep(rep, filename):
         True/False - Boolean. True if rep/filename combo is a cal rep
     """
 
-    if '.cal' in filename.lower():
+    if '.cal' in filename.lower() or '.ref' in filename.lower():
         if 'cal' not in rep.lower() and 'panel' not in rep.lower():
             # Calibration scan not labeled as such. Issue a warning
             warn_str = 'Cal rep from {0} mislabeled as {1}'.format(filename, rep)
@@ -348,6 +390,8 @@ def reps_to_targets(reps):
         rep = rep.lower()
         if rep.find('corn') > -1:
             targets.append('Corn')
+        elif rep.find('tassel') > -1:
+            targets.append('Corn (Tassel)')
         elif rep.find('soy') > -1:
             targets.append('Soybean')
         elif rep.find('bean') > -1:
@@ -357,7 +401,7 @@ def reps_to_targets(reps):
         elif rep in {'soil', 'baresoil'}:
             targets.append('Soil')
 
-    return targets
+    return list(set(targets))
 
 
 def filter_lists(list1, list2, val):
@@ -462,7 +506,10 @@ def create_key_dict(hkeys_list):
     # Averaged scans
     key_dict['Averaged Scans'] = find_cdap_key(hkeys_list, {'averaged scans', 'used scans', 'instrument scans'})
     # Calibration Mode
-    key_dict['Calibration Mode'] = find_cdap_key(hkeys_list, {'calibration mode'})
+    try:
+        key_dict['Calibration Mode'] = find_cdap_key(hkeys_list, {'calibration mode'})
+    except KeyError:
+        key_dict['Calibration Mode'] = ''
 
     return key_dict
 
@@ -490,23 +537,73 @@ def data2dict(data):
     # We will split the data into 'header' and scan data.
     headerdata = {}
     scandata = []
+    final_scandata = []
     # Maintain a list of headerkeys bc order of insert is important. for later processing
     hkeys = []
-    for row in data:
-        try:
-            # If the field can be turned to float, it should be a wavelength.
-            float(row[0])
-            # Add the original string wavelength as key to maintain precision.
-            scandata.append(row)
-        except ValueError:
-            if row[0].lower().startswith('dc'):
+    # Determine the idx at which scans begin
+    scan_idx = None
+    for idx, row in enumerate(data):
+        if scan_idx is None:
+            try:
+                # If the field can be turned to float, it should be a wavelength.
+                float(row[0])
+                # Add the original string wavelength as key to maintain precision.
                 scandata.append(row)
-                #scandata[row[0]] = row[1:]
-            else:
-                headerdata[row[0]] = row[1:]
-                hkeys.append(row[0])
+                scan_idx = idx
+            except ValueError:
+                if row[0].lower().startswith('dc'):
+                    scandata.append(row)
+                    scan_idx = idx
+                    #scandata[row[0]] = row[1:]
+                else:
+                    headerdata[row[0]] = row[1:]
+                    hkeys.append(row[0])
+        else:
+            # All the following rows should be scan data
+            scandata.append(row)
 
-    return headerdata, scandata, hkeys
+    # Now, modify the scandata list
+    # Check if the 24th and 25th scan rows are what we expected.
+    remove_rows = []
+    if scandata[24][0] != 'DC25' or scandata[0][0] != 'DC01':
+        if scandata[0][0] != 'DC01':
+            try:
+                float(scandata[0][0])
+            except ValueError:
+                err_str = 'UNEXPECTED FIRST SCAN ENTRY {0}'.format(scandata[0][0])
+                logging.error(err_str)
+                raise RuntimeError(err_str)
+        # Warn that we had to fix this.
+        warn_str = 'DC SCANS NOT PROPERLY LABELED. DC01 IS {0} and DC25 IS {1}'.format(scandata[0][0], scandata[24][0])
+        warnings.warn(warn_str)
+        logging.warning(warn_str)
+        # The DC scans are either not specified or last few were removed.
+        try:
+            # If the 25th scan can be converted to float, first 25 scans should be DC
+            float(scandata[24][0])
+            for row_idx in range(25):
+                scandata[row_idx][0] = 'DC{0}'.format(str(row_idx + 1).zfill(2))
+        except ValueError:
+            # Some of the scandata entries have been converted to
+            #   'extra' data (e.g., min/max that were never really used)
+            for row_idx in range(25):
+                if not scandata[row_idx][0].startswith('DC'):
+                    try:
+                        # If it can be converted to float, its a DC scan
+                        float(scandata[row_idx][0])
+                        scandata[row_idx][0] = 'DC{0}'.format(str(row_idx + 1).zfill(2))
+                    except ValueError:
+                        # Just remove those rows. They aren't needed.
+                        remove_rows.append(row_idx)
+
+    if remove_rows:
+        for idx, row in enumerate(scandata):
+            if idx not in remove_rows:
+                final_scandata.append(row)
+    else:
+        final_scandata = scandata
+
+    return headerdata, final_scandata, hkeys
 
 
 def getFields(data):
@@ -544,6 +641,46 @@ def coords2KML(lats, lons, starttimes, reps, saveto):
 
     # Save the result.
     kml.save(saveto)
+
+
+def create_kml_from_file(cdap_file, kml_file):
+    """
+    Creaes a KML file from a CDAP file using lat/lon
+
+    Point's name = project: rep
+    Point's description = Detected location
+    """
+    data = readData(cdap_file)
+    # Get the fields of the data
+    fields = getFields(data)
+    # Find the scan starting idx
+    scanidx = findScanIdx(fields)
+
+    # Create a list of just the header keys
+    hkeys = fields[0:scanidx]
+
+    # Find the desired fields (aux & metadata fields)
+    #   Maintain a dict of official name -> file key name
+    key_dict = create_key_dict(hkeys)
+
+    data_dict, _, _ = data2dict(data)
+
+    lats = data_dict[key_dict['Latitude']]
+    if not lats:
+        raise RuntimeError('Lat/Lon not found in {0}'.format(cdap_file))
+    lons = data_dict[key_dict['Longitude']]
+    projects = data_dict[key_dict['Project']]
+    reps = data_dict[key_dict['Replication']]
+
+    kml = simplekml.Kml(open=1)
+    for lat, lon, project, rep in zip(lats, lons, projects, reps):
+        loc, _, _, _ = determine_loc(lat, lon, project)
+        pt = kml.newpoint()
+        pt.name = '{0}: {1}'.format(project, rep)
+        pt.description = 'Detected Location: {0}\nProject: {1}\nRep: {2}\nLat/Lon: {3}/{4}'.format(loc, project, rep, lat, lon)
+        pt.coords = [(float(lon), float(lat))]
+
+    kml.save(kml_file)
 
 
 def mean(l):
@@ -647,7 +784,7 @@ def plot_scans(prep, prep_data,vheader, scanidx,saveto=None):
 
 
 def create_dataset_dirs(base_dir, current_dataset_id):
-    '''
+    """
     Function to facilitate creation of sub-directories for datasets.
     This function is called when a dataset being processed encounters a restructured dataset with the same date
     and location. They may be separate collections or duplicates. If separate collections, we want to make sure to
@@ -659,7 +796,8 @@ def create_dataset_dirs(base_dir, current_dataset_id):
 
     Returns:
         new_dir - path to the new directory the dataset currently being processed will reside within.
-    '''
+    """
+
     # Read metadata from existing dataset
     metadata = meta.read_metadata(os.path.join(base_dir, 'Metadata.csv'))
     # Get the dataset id from the existing dataset
@@ -667,8 +805,17 @@ def create_dataset_dirs(base_dir, current_dataset_id):
 
     # Ensure current dataset id != existing dataset id
     if existing_dataset_id == current_dataset_id:
-        raise RuntimeError('DUPLICATE DATASETS DETECTED IN '
-                           '{0}. DATASET ID {1}'.format(base_dir, existing_dataset_id))
+        # For now, we will create a copy for further investigation.
+
+        # Warn that this is happening.
+        warn_str = 'DUPLICATE DATASETS DETECTED IN {0}. DATASET ID {1}'.format(base_dir, existing_dataset_id)
+        warnings.warn(warn_str)
+        logging.warning(warn_str)
+
+        # Modify the dataset ids of the two datasets so they are different
+        #   (existing will have _1 appended to end and current will have _2 appended to end).
+        existing_dataset_id += '_1'
+        current_dataset_id += '_2'
 
     # Move the current contents of directory to the new, dataset id based directory.
     new_existing_dir = os.path.join(base_dir, existing_dataset_id.replace(':', ''))

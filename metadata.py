@@ -1,6 +1,8 @@
 """Functions related to metadata managment"""
 import csv
-from utility import get_instrument_info, reps_to_targets, filter_floats
+#from utility import get_instrument_info, reps_to_targets, filter_floats
+from utility import *
+import re
 
 
 def create_metadata_file(metadata, path):
@@ -24,7 +26,7 @@ def create_metadata_file(metadata, path):
         write = csv.writer(f, delimiter=',')
         for element in elements:
             if element in metadata.keys():
-                if element == 'Target':
+                if element == 'Target' or element == 'Calibration Panel':
                     row = [element]
                     row.extend(metadata[element])
                     write.writerow(row)
@@ -55,6 +57,9 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     meta_dict['Date'] = date
     #   Construct the datasetID
     start_times = data_dict[key_dict['Start Time']]
+    # Have a regular expression filter malformed timestamps
+    time_pattern = re.compile(r'\d{2}:\d{2}:\d{2}')
+    start_times = [time for time in start_times if time_pattern.match(time)]
     start_times.sort()
     min_start_time = start_times[0]
     dataset_id = '{0}_{1}_{2}'.format(project, date, min_start_time)
@@ -63,6 +68,7 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     meta_dict['Start Time'] = min_start_time
     #   Stoptime
     stop_times = data_dict[key_dict['Stop Time']]
+    stop_times = [time for time in stop_times if time_pattern.match(time)]
     stop_times.sort()
     meta_dict['Stop Time'] = stop_times[-1]
 
@@ -74,7 +80,7 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     meta_dict['Upwelling Instrument FOV'] = fov
 
     #   Cal panel
-    meta_dict['Calibration Panel'] = data_dict[key_dict['Calibration Panel']][0]
+    meta_dict['Calibration Panel'] = list(set(data_dict[key_dict['Calibration Panel']]))
     #   Software
     meta_dict['Software Version'] = data_dict[key_dict['Acquisition Software']][0]
     #   Target information
@@ -105,7 +111,7 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     meta_dict['Max Solar Azimuth'] = azimuths[-1]
     #   Min and Max lat/lon
     lats = data_dict[key_dict['Latitude']]
-    if lats:  # check if GPS was active
+    if lats and not all(val == '-9999' or val == '' for val in lats):  # check if GPS was active
         lats = filter_floats(lats)
         lats.sort()
         meta_dict['Min Latitude'] = lats[0]
@@ -120,28 +126,29 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     # Aux related metadata
     if 'Temperature 1' in key_dict.keys():
         temp1 = data_dict[key_dict['Temperature 1']]
-        if temp1:
+        if temp1 and not all(val == '-9999' for val in temp1):
             temp1 = filter_floats(temp1)
+
             temp1.sort()
             meta_dict['Min Temperature 1'] = temp1[0]
             meta_dict['Max Temperature 1'] = temp1[-1]
     if 'Temperature 2' in key_dict.keys():
         temp2 = data_dict[key_dict['Temperature 2']]
-        if temp2:
+        if temp2 and not all(val == '-9999' for val in temp2):
             temp2 = filter_floats(temp2)
             temp2.sort()
             meta_dict['Min Temperature 2'] = temp2[0]
             meta_dict['Max Temperature 2'] = temp2[-1]
     if 'Pyronometer' in key_dict.keys():
         pyro = data_dict[key_dict['Pyronometer']]
-        if pyro:
+        if pyro and not all(val == '-9999' for val in pyro):
             pyro = filter_floats(pyro)
             pyro.sort()
             meta_dict['Min Pyronometer'] = pyro[0]
             meta_dict['Max Pyronometer'] = pyro[-1]
     if 'Quantum Sensor' in key_dict.keys():
         quant = data_dict[key_dict['Quantum Sensor']]
-        if quant:
+        if quant and not all(val == '-9999' for val in quant):
             quant = filter_floats(quant)
             quant.sort()
             meta_dict['Min Quantum Sensor'] = quant[0]
