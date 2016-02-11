@@ -36,7 +36,7 @@ def create_aux_file(data_dict, key_dict, other_keys, dataset_id, path):
         # Add other found keys.
         if other_keys:
             for other_key in other_keys:
-                if data_dict[other_key]:
+                if data_dict[other_key] and any(entry != '' for entry in data_dict[other_key]):
                     row = [other_key]
                     row.extend(data_dict[other_key])
                     write.writerow(row)

@@ -18,7 +18,8 @@ def create_metadata_file(metadata, path):
                 'Country', 'State', 'County', 'Target',
                 'Acquisition Software', 'Software Version', 'Min Solar Elevation', 'Max Solar Elevation',
                 'Min Solar Azimuth', 'Max Solar Azimuth', 'Min Solar Zenith', 'Max Solar Zenith', 'Min Latitude',
-                'Max Latitude', 'Min Longitude', 'Max Longitude', 'Max Temperature 1', 'Min Temperature 1',
+                'Max Latitude','Average Latitude', 'Min Longitude', 'Max Longitude', 'Average Longitude',
+                'Max Temperature 1', 'Min Temperature 1',
                 'Max Temperature 2', 'Min Temperature 2', 'Max Pyronometer', 'Min Pyronometer', 'Max Quantum Sensor',
                 'Min Quantum Sensor','Illumination Source', 'Scans Count', 'Legacy Path']
 
@@ -116,12 +117,14 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
         lats.sort()
         meta_dict['Min Latitude'] = lats[0]
         meta_dict['Max Latitude'] = lats[-1]
+        meta_dict['Average Latitude'] = mean(lats)
         # Min and max lon (only do this if there were lats)
         lons = data_dict[key_dict['Longitude']]
         lons = filter_floats(lons)
         lons.sort()
         meta_dict['Min Longitude'] = lons[0]
         meta_dict['Max Longitude'] = lons[-1]
+        meta_dict['Average Longitude'] = mean(lons)
 
     # Aux related metadata
     if 'Temperature 1' in key_dict.keys():

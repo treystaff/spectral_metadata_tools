@@ -529,7 +529,7 @@ def readData(filepath):
     return datas
 
 
-def data2dict(data):
+def data2dict(data, fix_dc_scans=True):
     """
     Converts CDAP datalist to a dictionary indexed by fieldname.
     Currently does not work w/ CDAP2
@@ -565,36 +565,37 @@ def data2dict(data):
     # Now, modify the scandata list
     # Check if the 24th and 25th scan rows are what we expected.
     remove_rows = []
-    if scandata[24][0] != 'DC25' or scandata[0][0] != 'DC01':
-        if scandata[0][0] != 'DC01':
+    if fix_dc_scans:
+        if scandata[24][0] != 'DC25' or scandata[0][0] != 'DC01':
+            if scandata[0][0] != 'DC01':
+                try:
+                    float(scandata[0][0])
+                except ValueError:
+                    err_str = 'UNEXPECTED FIRST SCAN ENTRY {0}'.format(scandata[0][0])
+                    logging.error(err_str)
+                    raise RuntimeError(err_str)
+            # Warn that we had to fix this.
+            warn_str = 'DC SCANS NOT PROPERLY LABELED. DC01 IS {0} and DC25 IS {1}'.format(scandata[0][0], scandata[24][0])
+            warnings.warn(warn_str)
+            logging.warning(warn_str)
+            # The DC scans are either not specified or last few were removed.
             try:
-                float(scandata[0][0])
+                # If the 25th scan can be converted to float, first 25 scans should be DC
+                float(scandata[24][0])
+                for row_idx in range(25):
+                    scandata[row_idx][0] = 'DC{0}'.format(str(row_idx + 1).zfill(2))
             except ValueError:
-                err_str = 'UNEXPECTED FIRST SCAN ENTRY {0}'.format(scandata[0][0])
-                logging.error(err_str)
-                raise RuntimeError(err_str)
-        # Warn that we had to fix this.
-        warn_str = 'DC SCANS NOT PROPERLY LABELED. DC01 IS {0} and DC25 IS {1}'.format(scandata[0][0], scandata[24][0])
-        warnings.warn(warn_str)
-        logging.warning(warn_str)
-        # The DC scans are either not specified or last few were removed.
-        try:
-            # If the 25th scan can be converted to float, first 25 scans should be DC
-            float(scandata[24][0])
-            for row_idx in range(25):
-                scandata[row_idx][0] = 'DC{0}'.format(str(row_idx + 1).zfill(2))
-        except ValueError:
-            # Some of the scandata entries have been converted to
-            #   'extra' data (e.g., min/max that were never really used)
-            for row_idx in range(25):
-                if not scandata[row_idx][0].startswith('DC'):
-                    try:
-                        # If it can be converted to float, its a DC scan
-                        float(scandata[row_idx][0])
-                        scandata[row_idx][0] = 'DC{0}'.format(str(row_idx + 1).zfill(2))
-                    except ValueError:
-                        # Just remove those rows. They aren't needed.
-                        remove_rows.append(row_idx)
+                # Some of the scandata entries have been converted to
+                #   'extra' data (e.g., min/max that were never really used)
+                for row_idx in range(25):
+                    if not scandata[row_idx][0].startswith('DC'):
+                        try:
+                            # If it can be converted to float, its a DC scan
+                            float(scandata[row_idx][0])
+                            scandata[row_idx][0] = 'DC{0}'.format(str(row_idx + 1).zfill(2))
+                        except ValueError:
+                            # Just remove those rows. They aren't needed.
+                            remove_rows.append(row_idx)
 
     if remove_rows:
         for idx, row in enumerate(scandata):
@@ -650,6 +651,7 @@ def create_kml_from_file(cdap_file, kml_file):
     Point's name = project: rep
     Point's description = Detected location
     """
+    # Read the data
     data = readData(cdap_file)
     # Get the fields of the data
     fields = getFields(data)
@@ -658,13 +660,13 @@ def create_kml_from_file(cdap_file, kml_file):
 
     # Create a list of just the header keys
     hkeys = fields[0:scanidx]
-
-    # Find the desired fields (aux & metadata fields)
-    #   Maintain a dict of official name -> file key name
+    # Generate the keydict
     key_dict = create_key_dict(hkeys)
 
+    # Convert to a dict for easy access
     data_dict, _, _ = data2dict(data)
 
+    # Get desired info from the dict.
     lats = data_dict[key_dict['Latitude']]
     if not lats:
         raise RuntimeError('Lat/Lon not found in {0}'.format(cdap_file))
@@ -672,14 +674,16 @@ def create_kml_from_file(cdap_file, kml_file):
     projects = data_dict[key_dict['Project']]
     reps = data_dict[key_dict['Replication']]
 
+    # Create a new kml object and add a point for each scan.
     kml = simplekml.Kml(open=1)
     for lat, lon, project, rep in zip(lats, lons, projects, reps):
         loc, _, _, _ = determine_loc(lat, lon, project)
         pt = kml.newpoint()
         pt.name = '{0}: {1}'.format(project, rep)
-        pt.description = 'Detected Location: {0}\nProject: {1}\nRep: {2}\nLat/Lon: {3}/{4}'.format(loc, project, rep, lat, lon)
+        pt.description = 'Detected Location: {0}\nProject: {1}\nRep: {2}\n'.format(loc, project, rep)
         pt.coords = [(float(lon), float(lat))]
 
+    # Save the kml data to a file that can be opened in Google Earth.
     kml.save(kml_file)
 
 
@@ -835,7 +839,7 @@ def create_dataset_dirs(base_dir, current_dataset_id):
 
 
 def extract_col(col_idx, data):
-    '''
+    """
     Extracts a single column from a CDAP data list
 
     Parameters:
@@ -844,7 +848,7 @@ def extract_col(col_idx, data):
 
      Returns:
         col - list. One column from the cdap data list.
-    '''
+    """
     col = []
     for row in data:
         if len(row) >= 1:
@@ -854,3 +858,27 @@ def extract_col(col_idx, data):
                 col.append('')
 
     return col
+
+
+def split_path(path_str):
+    """
+    Split a path string into its constitutent directories
+
+    Note: Currently assumes unix-style path
+
+    Parameters:
+        path_str - Path string
+
+    Returns:
+        List of strings representing directories of the path string
+    """
+    # Split any file/object out from the path_str, if there:
+    if os.path.isfile(path_str):
+        path_str, _ = os.path.split(path_str)
+
+    elif not os.path.isdir(path_str):
+        # Path is not a directory. Warn the user.
+        print('path string {0} is not a valid file/directory!'.format(path_str))
+
+    return path_str.split('/')
+
