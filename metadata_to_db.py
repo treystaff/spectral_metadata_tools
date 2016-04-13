@@ -58,41 +58,58 @@ def load_metadata(restruct_dir, dbpath, user_uuid ='7367a141-eaf0-4aee-8f9a-ca05
                 warnings.warn('NO AUX FILE FOUND IN {0}'.format(restruct_dir))
             else:
                 aux_path = aux_path[0]
-                # Read data from the aux file and calculate avg. lat/lon
-                data = readData(aux_path)
-                for entry in data:
+                # Read data from the aux file and calculate avg. lat/lon 
+                data = readData(aux_path) 
+                for entry in data: 
                     entry = entry[0].split(',')
-                    if entry[0] == 'Latitude' and not all(val == '-9999' or val == '' for val in entry[1:]):
-                        avg_lat = mean(filter_floats(entry[1:]))
-                        include_latlon = True
-                        print('including caclulated lat/lon for {0}'.format(restruct_dir))
-                    if entry[0] == 'Longitude' and not all(val == '-9999' or val == '' for val in entry[1:]):
+                    if entry[0] == 'Latitude' and not all(val == '-9999' or val == '' for val in entry[1:]): 
+                        avg_lat = mean(filter_floats(entry[1:])) 
+                        include_latlon = True 
+                        print('including caclulated lat/lon for {0}'.format(restruct_dir)) 
+                    if entry[0] == 'Longitude' and not all(val == '-9999' or val == '' for val in entry[1:]): 
                         avg_lon = mean(filter_floats(entry[1:]))
-
-        else:
-            if 'Average Latitude' in meta_dict.keys():
+        else: 
+            if 'Average Latitude' in meta_dict.keys(): 
                 avg_lat = meta_dict['Average Latitude']
+
                 avg_lon = meta_dict['Average Longitude']
                 include_latlon = True
 
-        if include_latlon:
-                query_str = 'INSERT INTO datasets (id, user_id, project_id, date, start_time, stop_time, ' \
-                            'created_date, lat, lon) VALUES (?, ?,?, ?, ?, ?, datetime(), ?, ?)'
-
-                db.query(query_str, dataset_uuid, user_uuid,project_id, meta_dict['Date'],meta_dict['Start Time'],
-                         meta_dict['Stop Time'], avg_lat, avg_lon)
+        # Check if other location-information is present. 
+        if 'County' in meta_dict.keys():
+            county = meta_dict['County']
         else:
-            db.query('INSERT INTO datasets (id, user_id, project_id, date, start_time, stop_time, created_date)'
-                         'VALUES (?, ?,?, ?, ?, ?, datetime());',dataset_uuid, user_uuid, project_id, meta_dict['Date'],
-                         meta_dict['Start Time'], meta_dict['Stop Time'])
+            county = None
+        if 'State' in meta_dict.keys():
+            state = meta_dict['State']
+        else:
+            state = None
+        if 'Country' in meta_dict.keys():
+            country = meta_dict['Country']
+        else:
+            country = None
+        if 'Location' in meta_dict.keys():
+            location = meta_dict['Location']
+        else:
+            location = None
 
-        dataset_id = db.get_last_id()
+        if not include_latlon:
+            lat = None
+            lon = None
+
+        # insert the dataset info 
+        db.query('INSERT INTO datasets (id, user_id, project_id, date, start_time, stop_time, created_date, '
+                 'country, location, State, county)'
+                 'VALUES (?, ?,?, ?, ?, ?, datetime(), ?, ?, ?, ?);',
+                 dataset_uuid, user_uuid, project_id, meta_dict['Date'],
+                  meta_dict['Start Time'], meta_dict['Stop Time'],
+                  country, location, state, county)
 
         # Insert records
         for other_file in other_files:
             db.query('INSERT INTO records (id, dataset_id, path, filename, user_id, last_updated) '
                      'VALUES (?,?, ?, ?, ?, datetime())',
-                     str(uuid.uuid4()), dataset_id, restruct_dir, other_file, user_uuid)
+                     str(uuid.uuid4()), dataset_uuid, restruct_dir, other_file, user_uuid)
 
         # Meta values
         for key in meta_dict.keys():
@@ -102,7 +119,7 @@ def load_metadata(restruct_dir, dbpath, user_uuid ='7367a141-eaf0-4aee-8f9a-ca05
                 metadata_id = metadata_id[0][0]
                 db.query('INSERT INTO meta_values (id, metadata_id, dataset_id, value, user_id, last_updated) VALUES '
                          '(?,?, ?, ?, ?,datetime())',
-                         str(uuid.uuid4()), metadata_id, dataset_id, meta_dict[key], user_uuid)
+                         str(uuid.uuid4()), metadata_id, dataset_uuid, meta_dict[key], user_uuid)
 
         # Commit all changes.
         db.commit()
@@ -116,7 +133,7 @@ def load_metadata(restruct_dir, dbpath, user_uuid ='7367a141-eaf0-4aee-8f9a-ca05
         db.close()
 
 if __name__ == '__main__':
-    execfile('initDb.py')
+    execfile('/code/spectral_metadata_tools/initDb.py')
     for root, subdirs, files in os.walk('/media/sf_tmp/restruct2/'):
         if 'Metadata.csv' in files:
             load_metadata(root, '/tmp/MetaDataDb.db', calc_avg_latlon=True)
