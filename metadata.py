@@ -37,11 +37,10 @@ def create_metadata_file(metadata, path):
 
 def create_metadata_dict(data_dict, key_dict, data_dir):
     """
-    Constructs the metadata dictionary from a calibration data and scandata dictionaries
+    Constructs the metadata dictionary from a data dictionaries
 
     Parameters:
-        cal_dict - Dictionary of CALMIT calibration data
-        data_dict - Dicitonary of CALMIT scandata (not cal)
+        data_dict - Dicitonary of CALMIT
         key_dict - A key dictionary created via create_key_dict()
         data_dir - String. Path to data directory
 
