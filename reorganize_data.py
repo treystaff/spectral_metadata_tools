@@ -188,7 +188,6 @@ def process_upwelling(data_dir, out_dir):
                 loc_dict[location] = loc_list
                 del loc_list
 
-
     # Now that every scan has been processed, deal with cal data first:
     # -----------------------------------------------------------------
     # -------------------------cal processing--------------------------
@@ -246,16 +245,8 @@ def process_upwelling(data_dir, out_dir):
         # Load the data for the location, and convert to a dictionary for easy-access.
         data = loc_dict[loc]
 
-        # Put the caldata in a separate list
-        reps = data[fields.index(key_dict['Replication'])][1:]
-        raw_filenames = data[fields.index('File Name')][1:]
-        loc_cal_idxs = find_cal_reps(reps, raw_filenames)
-
-        #cal_data, scan_data = split_cal_scans(data, cal_idxs[loc])
-        _, scan_data = split_cal_scans(data, loc_cal_idxs)
-
         # Convert to dicts for ease of access
-        data_dict, data_scans, _ = data2dict(scan_data)
+        data_dict, data_scans, _ = data2dict(data)
 
         # Modify the datalogger entry: split datalogger values into respective fields
         if data_dict[key_dict['Data Logger']]:
@@ -267,7 +258,7 @@ def process_upwelling(data_dir, out_dir):
         loc_meta[loc]['County'] = county
         loc_meta[loc]['State'] = state
         loc_meta[loc]['Country'] = country
-        if loc in {'CSP01', 'CSP02', 'CSP03'}:
+        if loc in {'CSP01', 'CSP02', 'CSP03', 'CSP03A'}:
             # We know it's outside.
             loc_meta[loc]['Illumination Source'] = 'Sun'
 
@@ -306,8 +297,6 @@ def process_upwelling(data_dir, out_dir):
 
     # Return the metadata dict and key_dict
     return cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names
-
-    # TODO Also return info on location directory paths w/ loc & reps so other files can be moved.
 
 
 def process_downwelling(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standardized_project_names):
