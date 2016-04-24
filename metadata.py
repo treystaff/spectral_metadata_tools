@@ -5,34 +5,41 @@ from utility import *
 import re
 
 
-def create_metadata_file(metadata, path):
-    """Creates a metadata file"""
-    elements = ['Dataset ID', 'Project', 'Date', 'Start Time', 'Stop Time', 'Upwelling Instrument Name',
-                'Upwelling Instrument Serial Number',
-                'Upwelling Instrument FOV', 'Upwelling Instrument Channels', 'Upwelling Instrument Max Wavelength',
-                'Upwelling Instrument Min Wavelength',
-                'Downwelling Instrument Name', 'Downwelling Instrument Serial Number',
-                'Downwelling Instrument FOV', 'Downwelling Instrument Channgels',
-                'Downwelling Instrument Max Wavelength',
-                'Downwelling Instrument Min Wavelength', 'Calibration Panel', 'Calibration Mode', 'Location',
-                'Country', 'State', 'County', 'Target',
-                'Acquisition Software', 'Software Version', 'Min Solar Elevation', 'Max Solar Elevation',
-                'Min Solar Azimuth', 'Max Solar Azimuth', 'Min Solar Zenith', 'Max Solar Zenith', 'Min Latitude',
-                'Max Latitude','Average Latitude', 'Min Longitude', 'Max Longitude', 'Average Longitude',
-                'Max Temperature 1', 'Min Temperature 1',
-                'Max Temperature 2', 'Min Temperature 2', 'Max Pyronometer', 'Min Pyronometer', 'Max Quantum Sensor',
-                'Min Quantum Sensor','Illumination Source', 'Scans Count', 'Legacy Path']
+def create_metadata_file(metadata, meta_list_path, out_path):
+    """
+    Creates a metadata file
 
-    with open(path, 'w') as f:
+    Parameters:
+        metadata - dict. A calmit metadata dictionary (created with
+            create_metadata_dict)
+        meta_list_path - string. Path to a file defining metadata attributes
+        path - path of the output metadata file.
+            In the form [name, value, unit, description]
+    """
+    # Read metadata elements from the meta list file.
+    elements = []
+    with open(meta_list_path, 'r') as meta_list_file:
+        reader = csv.reader(meta_list_file, delimiter=',')
+        for row in reader:
+            elements.append(row)
+
+    # Now write the calmit metadata to file.
+    with open(out_path, 'w') as f:
         write = csv.writer(f, delimiter=',')
         for element in elements:
-            if element in metadata.keys():
-                if element == 'Target' or element == 'Calibration Panel':
-                    row = [element]
-                    row.extend(metadata[element])
-                    write.writerow(row)
+            attribute = element[0]
+            value = metadata[attribute]
+            if attribute in metadata.keys():
+                if isinstance(value, list) and len(value) > 1:
+                    # A couple of metadata entries have multiple values
+                    # (target, cal panel). Join them, separated by a ';'
+                    element.insert(1, ';'.join(value))
                 else:
-                    write.writerow([element, metadata[element]])
+                    # Just insert the value into the element list.
+                    element.insert(1, value)
+
+                # Write the metadata result to file. [name, value, unit, desc.]
+                write.writerow(element)
 
 
 def create_metadata_dict(data_dict, key_dict, data_dir):
