@@ -17,11 +17,13 @@ def create_metadata_file(metadata, meta_list_path, out_path):
             In the form [name, value, unit, description]
     """
     # Read metadata elements from the meta list file.
+    # (In the form [name, unit, desc., keyword_id]) we don't need the
+    # keyword_id.
     elements = []
     with open(meta_list_path, 'r') as meta_list_file:
         reader = csv.reader(meta_list_file, delimiter=',')
         for row in reader:
-            elements.append(row)
+            elements.append(row[:-1])
 
     # Now write the calmit metadata to file.
     with open(out_path, 'w') as f:
@@ -42,7 +44,7 @@ def create_metadata_file(metadata, meta_list_path, out_path):
                 write.writerow(element)
 
 
-def create_metadata_dict(data_dict, key_dict, data_dir):
+def create_metadata_dict(data_dict, key_dict, data_dir, cal=False):
     """
     Constructs the metadata dictionary from a data dictionaries
 
@@ -50,13 +52,18 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
         data_dict - Dicitonary of CALMIT
         key_dict - A key dictionary created via create_key_dict()
         data_dir - String. Path to data directory
+        cal - Boolean (defualt: False). Specifies if this will be a cal meta
+            dict
 
     Returns:
         meta_dict - A dictionary
     """
     meta_dict = dict()
     #   Get the project name
-    project = data_dict[key_dict['Project']][0]
+    if cal:
+        project = 'CSP-CAL'
+    else:
+        project = data_dict[key_dict['Project']][0]
 
     meta_dict['Project'] = project
     #   Date
@@ -91,7 +98,10 @@ def create_metadata_dict(data_dict, key_dict, data_dir):
     #   Software
     meta_dict['Software Version'] = data_dict[key_dict['Acquisition Software']][0]
     #   Target information
-    meta_dict['Target'] = reps_to_targets(data_dict[key_dict['Replication']])
+    if cal:
+        meta_dict['Target'] = cal_meta['Calibration Panel']
+    else:
+        meta_dict['Target'] = reps_to_targets(data_dict[key_dict['Replication']])
     #   Legacy Path
     meta_dict['Legacy Path'] = data_dir[data_dir.find('sf_') + 3:]  # Remove the /media/sf_ prefix from using the VM.
     #   Calibration Mode
