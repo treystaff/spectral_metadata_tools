@@ -200,15 +200,14 @@ def process_upwelling(data_dir, out_dir):
         cal_dict = datalogger_to_dict(cal_dict, key_dict, data_dir)
 
     # Create the calibration metadata dict
-    cal_meta = create_metadata_dict(cal_dict, key_dict, data_dir)
+    cal_meta = create_metadata_dict(cal_dict, key_dict, data_dir, cal=True)
 
     # Add instrument-specific meta to cal_meta.
     cal_meta['Upwelling Instrument Max Wavelength'] = max(wavelengths)
     cal_meta['Upwelling Instrument Min Wavelength'] = min(wavelengths)
     cal_meta['Upwelling Instrument Channels'] = len(wavelengths)
 
-    # Have the Target of cal data be the calibration panel
-    cal_meta['Target'] = cal_meta['Calibration Panel']
+    # Also edit the project
 
     if cdap2 is False:
         cal_meta['Acquisition Software'] = 'CALMIT Data Acquisition Program (CDAP)'
