@@ -1,6 +1,14 @@
 from mySqlite import mySqlite
+import csv
 import os
 import uuid
+
+# Define the path to the metadata descriptions file (this is the master file
+# used to control what is considered metadata, metadata descriptions, etc.)
+meta_list_path = '/code/spectral_metadata_tools/METADATA_DESCRIPTIONS.csv'
+
+# Define the user-id we'll be using.
+user_id = '7367a141-eaf0-4aee-8f9a-ca059150acca'
 
 # Define the path to the database. Remove it if it already exists.
 db_path = '/tmp/MetaDataDb.db'
@@ -28,7 +36,7 @@ db.query('''CREATE TABLE user (
 
 user_uuid = uuid.uuid4()
 db.query('''INSERT INTO user (user_id, f_name, l_name, organization, profession, psswrd, email) VALUES
-    (?, 'Trey', 'Stafford', 'CALMIT', 'Student', 'testpass', 'treystaff@gmail.com');''', str(user_uuid))
+    (?, 'admin', 'admin', 'admin', 'admin', 'admin', 'admin@admin.com');''', str(user_uuid))
 
 # Categories table and entries
 db.query('''CREATE TABLE categories (
@@ -82,11 +90,12 @@ keywords_entries = [
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '0316ac68-b6cb-43ea-9e51-d59a4d4be6ab', 'Calibration Mode', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9cd960c2-c620-4563-9314-303c4a2c044a', 'Upwelling Instrument Channels', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9cd960c2-c620-4563-9314-303c4a2c044a', 'Downwelling Instrument Channels', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '946ee4a0-d893-4089-84ea-5145560884f2', 'Cal Scans Count', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '946ee4a0-d893-4089-84ea-5145560884f2', 'Data Scans Count', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '946ee4a0-d893-4089-84ea-5145560884f2', 'Scans Count', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Minimum Latitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Maximum Longitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Minimum Longitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Average Longitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Average Latitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '1b16b1db-c9a9-4181-9bfd-2efe933f401c', 'Illumination Source', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '1b16b1db-c9a9-4181-9bfd-2efe933f401c', 'Minimum Solar Azimuth', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '1b16b1db-c9a9-4181-9bfd-2efe933f401c', 'Maximum Solar Azimuth', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
@@ -97,15 +106,15 @@ keywords_entries = [
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Minimum Altitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Maximum Altitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Maximum Latitude', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '73e05abe-8b54-4c9f-8b87-c9406808249d', 'Vegetation', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '73e05abe-8b54-4c9f-8b87-c9406808249d', 'Target', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'State', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Place Name', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'County', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '9c17a7f4-5774-4d35-8e00-0717a08c054b', 'Country', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Minimum Temperature 1', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Maximum Temperature 1', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Minimum Temperature 2', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
-            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Maximum Temperature 2', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Minimum Canopy Temperature', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Maximum Canopy Temperature', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Minimum Wheel Temperature', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
+            "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Maximum Wheel Temperature', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Minimum Pyranometer', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Maximum Pyranometer', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
             "INSERT INTO keywords (id, category_id, name, compulsory,user_id, last_updated) VALUES (?, '7f1343bf-0bbf-46e4-8f8a-86fda688c170', 'Minimum Quantum Sensor', 0, '7367a141-eaf0-4aee-8f9a-ca059150acca' ,datetime());",
@@ -124,6 +133,7 @@ db.query('''CREATE TABLE projects (
             sponsor text,
             organization text,
             contact text,
+            flag boolean,
             created_date datetime);
         ''')
 
@@ -160,62 +170,41 @@ db.query('''CREATE TABLE metadata (
             name text,
             version text,
             description text,
+            units text,
             reserved text,
             last_updated datetime);''')
 
-metadata_entries = [
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Illumination Source'),'Illumination Source','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Other'),'Legacy Path','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Other'),'Dataset ID','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Latitude'),'Max Latitude','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Latitude'),'Min Latitude','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Longitude'),'Max Longitude','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Longitude'),'Min Longitude','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Acquisition Software'), 'Acquisition Software', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Software Version'), 'Software Version', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Solar Azimuth'), 'Min Solar Azimuth', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Solar Azimuth'), 'Max Solar Azimuth', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Solar Elevation'), 'Min Solar Elevation', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Solar Elevation'), 'Max Solar Elevation', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Solar Zenith'), 'Min Solar Zenith', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Solar Zenith'), 'Max Solar Zenith', 'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Upwelling Instrument Name'),'Upwelling Instrument Name','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Upwelling Instrument Serial Number'),'Upwelling Instrument Serial Number','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Upwelling Instrument FOV'),'Upwelling Instrument FOV','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Upwelling Instrument Maximum Wavelength'),'Upwelling Instrument Max Wavelength','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Upwelling Instrument Minimum Wavelength'),'Upwelling Instrument Min Wavelength','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Downwelling Instrument Name'),'Downwelling Instrument Name','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Downwelling Instrument Serial Number'),'Downwelling Instrument Serial Number','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Downwelling Instrument FOV'),'Downwelling Instrument FOV','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Downwelling Instrument Maximum Wavelength'),'Downwelling Instrument Max Wavelength','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Downwelling Instrument Minimum Wavelength'),'Downwelling Instrument Min Wavelength','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Altitude'),'Min Altitude','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Altitude'),'Max Altitude','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Calibration Mode'),'Calibration Mode','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Calibration Panel'),'Calibration Panel','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Calibration Scans Count'),'Cal Scans Count','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Data Scans Count'),'Data Scans Count','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Upwelling Instrument Channels'),'Upwelling Instrument Channels','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Downwelling Instrument Channels'),'Downwelling Instrument Channels','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Vegetation'),'Target','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'State'),'State','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Place Name'),'Location','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'County'),'County','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Country'),'Country','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Temperature 1'),'Min Temperature 1','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Temperature 1'),'Max Temperature 1','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Temperature 2'),'Min Temperature 2','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Temperature 2'),'Max Temperature 2','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Pyronometer'),'Min Pyronometer','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Pyronometer'),'Max Pyronometer','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Minimum Quantum Sensor'),'Min Quantum Sensor','Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());",
-    "INSERT INTO metadata (id, keyword_id, name, version, user_id, last_updated) VALUES (?, (SELECT id FROM keywords WHERE name = 'Maximum Quantum Sensor'),'Max Quantum Sensor' ,'Restructured Data', '7367a141-eaf0-4aee-8f9a-ca059150acca', datetime());"
-]
+# Read metadata elements from the meta list file.
+elements = []
+with open(meta_list_path, 'r') as meta_list_file:
+    reader = csv.reader(meta_list_file, delimiter=',')
+    for row in reader:
+        elements.append(row)
 
-for entry in metadata_entries:
+# Add each metadata element to the medtadata table
+for element in elements:
+    # Each element is [meta_name, units, description, keyword_name]
+    meta_name, units, desc, keyword_name = element
+    if 'null' in units.lower():
+        units = None
 
-    db.query(entry, str(uuid.uuid4()))
+    # First, find the keyword id associated with this metadata entry. 
+    keyword_id = db.query("SELECT id FROM keywords WHERE name = ?",
+                          keyword_name)
 
+    if keyword_id:
+        keyword_id = keyword_id[0][0]
+    else:
+        print("WARNING: KEYWORD {0} WAS NOT FOUND IN THE \
+              KEYWORD TABLE!".format(keyword_name))
+        continue
+
+    query_str = "INSERT INTO metadata (id, keyword_id, name, version, \
+            last_updated, units, description, user_id) VALUES \
+            (?, ?, ?, 'Restructured Data', datetime(), ?, ?, ?)"
+
+    db.query(query_str, str(uuid.uuid4()), keyword_id, meta_name, units, desc,
+             user_id)
 
 # meta_values table
 db.query('''CREATE TABLE meta_values (
