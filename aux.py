@@ -46,6 +46,7 @@ def copy_otherfiles(in_dir, out_dir, filenames, scan_info):
     """Does the work of matching otherfiles and copying them to the appropriate directory"""
     img_filenames = []  # Maintain a record of image filenames for the file
     pic_dir = os.path.join(out_dir, 'Pictures')
+    raw_dir = os.path.join(out_dir, 'Binary')  # Raw, binary files 
     for project, date, rep, scan_number, _ in zip(*scan_info):
         # Create a regex for matching files corresponding to this.
         pattern = '{0}_{1}_{2}_.*_.*_{3}*'.format(project, date, rep, scan_number)
@@ -61,14 +62,16 @@ def copy_otherfiles(in_dir, out_dir, filenames, scan_info):
 
                     # Copy the file
                     shutil.copy2(os.path.join(in_dir, filename),
-                                   pic_dir)
+                                 pic_dir)
 
                     # Maintain a record of image filenames for the file
                     img_filenames.append(filename)
                 else:
-                    # Copy to base dir
+                    # Copy raw, binary files to a 'raw' folder
+                    if not os.path.exists(raw_dir):
+                        os.makedirs(raw_dir)
                     shutil.copy2(os.path.join(in_dir, filename),
-                                    out_dir)
+                                 raw_dir)
 
     return img_filenames
 
@@ -136,6 +139,7 @@ def process_otherfiles(in_dir, cal_meta, loc_meta):
     # Do the calibration stuff first
     cal_dir = cal_meta['out_dir']
     scans_info = parse_scans_info(cal_meta['scans_info'])
+    copy_otherfiles(in_dir, cal_dir, filenames, scans_info)
     if logdata:
         process_logfile(logdata, scans_info, cal_dir)
 
@@ -144,6 +148,7 @@ def process_otherfiles(in_dir, cal_meta, loc_meta):
         meta_dict = loc_meta[loc]
         loc_dir = meta_dict['out_dir']
         scans_info = parse_scans_info(meta_dict['scans_info'])
+        copy_otherfiles(in_dir, loc_dir, filenames, scans_info)
         if logdata:
             process_logfile(logdata, scans_info, loc_dir)
 
