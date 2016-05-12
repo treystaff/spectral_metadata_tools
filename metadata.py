@@ -5,17 +5,20 @@ from utility import *
 import re
 
 
-def create_metadata_file(metadata, meta_list_path, out_path):
+def create_metadata_file(metadata,  out_path):
     """
-    Creates a metadata file
+    Creates a metadata file 
+    (note, this function may not work properly in an
+    interpreter because it assumes the file attribute exists.)
 
     Parameters:
         metadata - dict. A calmit metadata dictionary (created with
             create_metadata_dict)
-        meta_list_path - string. Path to a file defining metadata attributes
         path - path of the output metadata file.
             In the form [name, value, unit, description]
     """
+    meta_list_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                  'METADATA_DESCRIPTIONS.csv')
     # Read metadata elements from the meta list file.
     # (In the form [name, unit, desc., keyword_id]) we don't need the
     # keyword_id.
@@ -30,12 +33,15 @@ def create_metadata_file(metadata, meta_list_path, out_path):
         write = csv.writer(f, delimiter=',')
         for element in elements:
             attribute = element[0]
-            value = metadata[attribute]
             if attribute in metadata.keys():
-                if isinstance(value, list) and len(value) > 1:
-                    # A couple of metadata entries have multiple values
-                    # (target, cal panel). Join them, separated by a ';'
-                    element.insert(1, ';'.join(value))
+                value = metadata[attribute]
+                if isinstance(value, list):
+                    if len(value) > 1:
+                        # A couple of metadata entries have multiple values
+                        # (target, cal panel). Join them, separated by a ';'
+                        element.insert(1, ';'.join(value))
+                    else:
+                        element.insert(1, value[0])
                 else:
                     # Just insert the value into the element list.
                     element.insert(1, value)
@@ -99,7 +105,7 @@ def create_metadata_dict(data_dict, key_dict, data_dir, cal=False):
     meta_dict['Software Version'] = data_dict[key_dict['Acquisition Software']][0]
     #   Target information
     if cal:
-        meta_dict['Target'] = cal_meta['Calibration Panel']
+        meta_dict['Target'] = meta_dict['Calibration Panel']
     else:
         meta_dict['Target'] = reps_to_targets(data_dict[key_dict['Replication']])
     #   Legacy Path
