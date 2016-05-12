@@ -134,8 +134,7 @@ def process_upwelling(data_dir, out_dir):
     # Prepare the cal data structure
     cal_data = copy.deepcopy(empty_data)  # Just make a copy of the empty_data
 
-    # TODO can also have this separate cal scans & standardize projects & issue warning
-    # TODO just iterate over every col, instead of separating later. That way everything for a scan is available immediately.
+    # Process each col individually to determine if cal or spectral data.
     num_scans = len(data[filename_idx][1:])
     for col_idx in range(1, num_scans + 1):
         col_data = extract_col(col_idx, data)
