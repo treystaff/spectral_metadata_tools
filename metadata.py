@@ -149,29 +149,29 @@ def create_metadata_dict(data_dict, key_dict, data_dir, cal=False):
         meta_dict['Average Longitude'] = mean(lons)
 
     # Aux related metadata
-    if 'Temperature 1' in key_dict.keys():
-        temp1 = data_dict[key_dict['Temperature 1']]
+    if 'Canopy Temperature' in key_dict.keys():
+        temp1 = data_dict[key_dict['Canopy Temperature']]
         if temp1 and not all(val == '-9999' for val in temp1):
             temp1 = filter_floats(temp1)
 
             temp1.sort()
-            meta_dict['Min Temperature 1'] = temp1[0]
-            meta_dict['Max Temperature 1'] = temp1[-1]
-    if 'Temperature 2' in key_dict.keys():
-        temp2 = data_dict[key_dict['Temperature 2']]
+            meta_dict['Min Canopy Temperature'] = temp1[0]
+            meta_dict['Max Canopy Temperature'] = temp1[-1]
+    if 'Wheel Temperature' in key_dict.keys() and 'Wheel Temperature' in data_dict.keys():
+        temp2 = data_dict[key_dict['Wheel Temperature']]
         if temp2 and not all(val == '-9999' for val in temp2):
             temp2 = filter_floats(temp2)
             temp2.sort()
-            meta_dict['Min Temperature 2'] = temp2[0]
-            meta_dict['Max Temperature 2'] = temp2[-1]
-    if 'Pyronometer' in key_dict.keys():
-        pyro = data_dict[key_dict['Pyronometer']]
+            meta_dict['Min Wheel Temperature'] = temp2[0]
+            meta_dict['Max Wheel Temperature'] = temp2[-1]
+    if 'Pyranometer' in key_dict.keys() and 'Pyranometer' in data_dict.keys():
+        pyro = data_dict[key_dict['Pyranometer']]
         if pyro and not all(val == '-9999' for val in pyro):
             pyro = filter_floats(pyro)
             pyro.sort()
-            meta_dict['Min Pyronometer'] = pyro[0]
-            meta_dict['Max Pyronometer'] = pyro[-1]
-    if 'Quantum Sensor' in key_dict.keys():
+            meta_dict['Min Pyranometer'] = pyro[0]
+            meta_dict['Max Pyranometer'] = pyro[-1]
+    if 'Quantum Sensor' in key_dict.keys() and 'Quantum Sensor' in data_dict.keys():
         quant = data_dict[key_dict['Quantum Sensor']]
         if quant and not all(val == '-9999' for val in quant):
             quant = filter_floats(quant)
