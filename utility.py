@@ -58,8 +58,6 @@ def create_raw_scans_files(file_paths, cal_idxs, loc_idxs, loc_meta, cal_meta, k
 
             del odata
 
-    fields = getFields(data)
-
     # Deal with the cal data
     cal_data = split_by_idxs(data, cal_idxs)
     cal_dict, cal_scans, _ = data2dict(cal_data)
@@ -106,6 +104,7 @@ def standardize_project_name(project_name, location_name):
     all_csp_names.extend(csp02_list)
     all_csp_names.extend(csp03_list)
     all_csp_names.extend(csp03a_list)
+    all_csp_names.append('csp')
 
     project_name = project_name.lower()
     if location_name == 'CSP01':
@@ -192,9 +191,7 @@ def standardize_project_name(project_name, location_name):
             warnings.warn(warn_str)
             logging.warning(warn_str)
 
-    # If none of the above conditions are met, the location is unknown. Just return the project name.
     return project_name
-
 
 def split_by_idxs(data, idxs):
     """
