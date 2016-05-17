@@ -1,0 +1,51 @@
+Dataset ID, NULL, A unique identifier for each dataset. This is constructed from a concatenation of project name; date; and the start time for the project.,Other
+Project, NULL, The project name the dataset belongs to.,Other
+Date, NULL, The date the data were collected. ,Other
+Start Time, NULL, The timestamp at which the first scan for the dataset was taken. ,Other
+Stop Time, NULL, The timestamp at which the last scan for the dataset was taken. ,Other
+Upwelling Instrument Name, NULL, The name of the instrument used to take upwelling spectral measurements.,Upwelling Instrument Name
+Upwelling Instrument Serial Number, NULL, The serial number for the upwelling instrument.,Upwelling Instrument Serial Number
+Upwelling Instrument FOV, Degrees, The Field of View (FOV) of the Upwelling Instrument. Raw fiber typically used which has a 24.8 degree FOV. This value may be rounded up to 25 degrees.,Upwelling Instrument FOV
+Upwelling Instrument Channels, NULL, The number of channels or 'bands' that the upwelling instrument has.,Upwelling Instrument Channels
+Upwelling Instrument Max Wavelength, Nanometers, The upwelling instrument's maximum mavelength. Defined by the band's center.,Upwelling Instrument Max Wavelength
+Upwelling Instrument Min Wavelength, Nanometers, The upwelling instrument's minimum mavelength. Defined by the band's center.,Upwelling Instrument Min Wavelength
+Downwelling Instrument Name, NULL, The name of the instrument used to take downwelling spectral measurements.,Downwelling Instrument Name
+Downwelling Instrument Serial Number, NULL, The serial number for the downwelling instrument. ,Downwelling Instrument Serial Number
+Downwelling Instrument FOV, Degrees, The Field of View (FOV) of the downwelling Instrument ,Downwelling Instrument FOV
+Downwelling Instrument Channels, NULL, The number of channels or 'bands' that the downwelling instrument has.,Downwelling Instrument Channels
+Downwelling Instrument Max Wavelength, Nanometers, The downwelling instrument's maximum mavelength. Defined by the band's center.,Downwelling Instrument Max Wavelength
+Downwelling Instrument Min Wavelength, Nanometers, The downwelling instrument's minimum mavelength. Defined by the band's center.,Downwelling Instrument Min Wavelength
+Calibration Panel, NULL, The name/description of the calibration panel used,Calibration Panel
+Calibration Mode, NULL, How calibration scans were averaged to calibrate data (MEDIAN or MEAN). ,Calibration Mode
+Location, NULL, The name of the location at which the data was taken.,Place Name
+Country, NULL, The country within which the data were collected.,Country
+State, NULL, The state within which the data were collected.,State
+County, NULL, The county within which the data were collected.,County
+Target, NULL, The target of the data collection,Target
+Acquisition Software, NULL, The name of the software used to collect the data.,Acquisition Software
+Software Version, NULL, The version of the acquisition software used to collect the data.,Software Version
+Min Solar Elevation, Degrees, The minimum solar elevation observed during data collection,Minimum Solar Elevation
+Max Solar Elevation, Degrees, The maximum solar elevation observed during data collection,Maximum Solar Elevation
+Min Solar Azimuth, Degrees, The minimum solar azimuth observed during data collection.,Minimum Solar Azimuth
+Max Solar Azimuth, Degrees, The maximum solar azimuth observed during data collection.,Maximum Solar Azimuth
+Min Solar Zenith, Degrees, The minimum solar zenith observed during data collection.,Minimum Solar Zenith
+Max Solar Zenith, Degrees, The maximum solar zenith observed during data collection.,Maximum Solar Zenith
+Min Latitude, Decimal degrees, The minimum latitude in geographic decimal degrees. Referenced to  NAD83 datum. ,Minimum Latitude
+Max Latitude, Decimal degrees, The maximum latitude in geographic decimal degrees.  Referenced to  NAD83 datum. ,Maximum Latitude
+Min Longitude, Decimal degrees, The minimum longitude in geographic decimal degrees.  Referenced to  NAD83 datum. ,Minimum Longitude
+Max Longitude, Decimal degrees, The maximum longitude in geographic decimal degrees.  Referenced to  NAD83 datum. ,Maximum Longitude
+Average Longitude, Decimal degrees, The average longitude in geographic decimal degrees.  Referenced to  NAD83 datum. ,Average Longitude
+Average Latitude, Decimal degrees, The average latitude in geographic decimal degrees.  Referenced to  NAD83 datum. ,Average Latitude
+Min Altitude, Meters, Minimum platform altitude,Minimum Altitude
+Max Altitude, Meters, Maximum platform altitude,Maximum Altitude
+Min Canopy Temperature, Degrees Fahrenheit, The minimum recorded temperature from Everst Interscience Inc. IRT positioned over the canopy.,Minimum Canopy Temperature
+Max Canopy Temperature, Degrees Fahrenheit, The maximum  recorded temperature from Everst Interscience Inc. IRT positioned over the canopy.,Maximum Canopy Temperature
+Min Wheel Temperature, Degrees Fahrenheit, The minimum  recorded temperature from Everst Interscience Inc. IRT positioned over the wheel (pointed toward soil).  ,Minimum Wheel Temperature
+Max Wheel Temperature, Degrees Fahrenheit, The maximum  recorded temperature from Everst Interscience Inc. IRT positioned over the wheel (pointed toward soil).  ,Maximum Wheel Temperature
+Min Pyranometer,watts per meter squared, The minimum recorded value from the pyranometer . LI-COR instrument sensitive up to 1100 nm. ,Minimum Pyranometer
+Max Pyranometer,watts per meter squared, The maximum recorded value from the pyranometer . LI-COR instrument sensitive up to 1100 nm. ,Maximum Pyranometer
+Min Quantum Sensor,microeinsteins, The minimum recorded value from the quantum sensor. Instrument was mounted on the boom. Sensitive to the visible portion of the spectrum (400-700 nm). Measures photon flux density.,Minimum Quantum Sensor
+Max Quantum Sensor,microeinsteins, The maximum recorded value from the quantum sensor. Instrument was mounted on the boom. Sensitive to the visible portion of the spectrum (400-700 nm). Measures photon flux density.,Maximum Quantum Sensor
+Illumination Source, NULL, The source of illumination during data collection.,Illumination Source
+Scans Count, NULL, The number of scans included in the dataset.,Scans Count
+Legacy Path, NULL, The path to the directory containing the original CDAP data files from which the dataset was constructed.,Other
