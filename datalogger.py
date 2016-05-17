@@ -56,6 +56,12 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
     Returns:
         data_dict, key_dict - Modified dictionaries.
     """
+    # First, clean up any previous entries to datalogger_to_dict.
+    dl_entries = ['Wheel Temperature', 'Canopy Temperature', 'Pyranometer',
+                  'Quantum Sensor']
+    for dl_entry in dl_entries:
+        if dl_entry in key_dict.keys():
+            del key_dict[dl_entry]
     data_datalogger = data_dict[key_dict['Data Logger']]
     num_entries = None
     for data_str in data_datalogger:
@@ -73,25 +79,25 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
     data_entries = unzip_dlogger_entries(split_datalogger_entries(data_datalogger), num_entries=num_entries)
 
     # TODO rename temperature 1 and 2.
-    entry_names = ['Battery Voltage', 'Temperature 1', 'Temperature 2']
+    entry_names = ['Battery Voltage', 'Canopy Temperature', 'Wheel Temperature']
     if num_entries == 4:
-        entry_names.append('Pyronometer')
+        entry_names.append('Pyranometer')
     elif num_entries == 5:
-        # Either Pyronometer then Quantum Sensor or None then Pyronometer.
+        # Either Pyranometer then Quantum Sensor or None then Pyranometer.
         if all(float(val) < 0 for val in data_entries[3]) and all(float(val) < 0 for val in data_entries[4]):
-            entry_names.extend([None, 'Pyronometer'])
-            entry_names[2] = None  # Temperature 2 also becomes None.
+            entry_names.extend([None, 'Pyranometer'])
+            entry_names[2] = None  # Wheel Temperature also becomes None.
         else:
             if mean(data_entries[3]) > mean(data_entries[4]):
                 err_str = "\n WARNING: PYRONOMETER VALUES FOUND HIGHER THAN QUANTUM SENSOR. MAYBE " \
                           "UNKNOWN DATALOGGER TYPE {0}. Proceeding anyway. \n".format(data_dir)
                 print(err_str)
 
-            entry_names.extend(['Pyronometer', 'Quantum Sensor'])
+            entry_names.extend(['Pyranometer', 'Quantum Sensor'])
 
     elif num_entries == 6 and all(float(val) < 0 for val in data_entries[5]):  # Last value is -99999
-        # battery volt, temp1, temp2, Pyronometer, Quantum Sensor, None.
-        entry_names.extend(['Pyronometer', 'Quantum Sensor', None])
+        # battery volt, temp1, temp2, Pyranometer, Quantum Sensor, None.
+        entry_names.extend(['Pyranometer', 'Quantum Sensor', None])
 
     elif num_entries == 3:
         # Just battery voltage, temp1, temp2.
@@ -99,8 +105,6 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
 
     else:
         # TODO Implement other datalogger types (if there are any others...)
-        import pdb
-        pdb.set_trace()
         raise NotImplementedError('Unrecognized Datalogger string. Sorry!')
 
     # Create an entry in the data and cal dicts for the split datalogger data.
@@ -128,11 +132,11 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
                     elif float(value) < 0:
                         # TODO standardize nodata value. For now, use -9999
                         data_dict[name].append('-9999')
-                    elif name in {'Temperature 1', 'Temperature 2'} and float(value) > 250:
+                    elif name in {'Canopy Temperature', 'Wheel Temperature'} and float(value) > 250:
                         data_dict[name].append('-9999')
                     else:
                         data_dict[name].append(value)
 
     del data_dict[key_dict['Data Logger']]
-    return data_dict
+    return data_dict, key_dict
 
