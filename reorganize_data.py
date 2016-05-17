@@ -19,11 +19,10 @@ from utility import *
 from aux import *
 import logging
 import time
-import traceback
 import copy
 
 
-def process_upwelling(data_dir, out_dir):
+def process_upwelling(data_dir, out_dir, only_csp=True):
     """
     Processes the upwelling file(s) in a CDAP data directory.
 
@@ -151,7 +150,15 @@ def process_upwelling(data_dir, out_dir):
             county = 'Unknown'
 
         # Once we have the location, we can standardize this scan's project name.
-        col_data[project_idx] = standardize_project_name(project, location)
+        s_project_name = standardize_project_name(project, location)
+        if s_project_name is None:
+            if only_csp:
+                continue
+            else:
+                col_data[project_idx] = project
+        else:
+            col_data[project_idx] = s_project_name
+
         standard_project_names.append(col_data[project_idx])
 
         # Figure out if this is a cal scan
@@ -196,7 +203,7 @@ def process_upwelling(data_dir, out_dir):
 
     # Modify the datalogger entry: split datalogger values into respective fields
     if cal_dict[key_dict['Data Logger']]:
-        cal_dict = datalogger_to_dict(cal_dict, key_dict, data_dir)
+        cal_dict, key_dict = datalogger_to_dict(cal_dict, key_dict, data_dir)
 
     # Create the calibration metadata dict
     cal_meta = create_metadata_dict(cal_dict, key_dict, data_dir, cal=True)
@@ -248,7 +255,7 @@ def process_upwelling(data_dir, out_dir):
 
         # Modify the datalogger entry: split datalogger values into respective fields
         if data_dict[key_dict['Data Logger']]:
-            data_dict = datalogger_to_dict(data_dict, key_dict, data_dir)
+            data_dict, key_dict = datalogger_to_dict(data_dict, key_dict, data_dir)
 
         # Construct the metadata for this location.
         loc_meta[loc] = create_metadata_dict(data_dict, key_dict, data_dir)
@@ -491,29 +498,6 @@ def process_reflectance(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_di
                                  os.path.join(loc_dir, 'Reflectance_data.csv'))
 
 
-def test_split():
-    import shutil
-    data_dir = '/media/sf_tmp/exdata/'
-    out_dir = '/media/sf_tmp/restruct_test/'
-    shutil.rmtree(out_dir)
-
-    if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
-
-    logging.basicConfig(filename='/media/sf_tmp/restruct_test/app_log.txt',
-                        format='%(levelname)s: %(message)s', level=logging.DEBUG)
-
-    logging.basicConfig(filename='/media/sf_tmp/restruct_test/error_log.txt',
-                        format='%(levelname)s: %(message)s', level=logging.ERROR)
-
-    try:
-        cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names = process_upwelling(data_dir, out_dir)
-        process_otherfiles(data_dir, cal_meta, loc_meta)
-        process_downwelling(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names)
-        process_reflectance(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names)
-    finally:
-        logging.shutdown()
-
 
 def find_datafiles(years, processing_dir='/media/sf_tmp/processing_lists/'):
     """
@@ -561,91 +545,3 @@ def find_datafiles(years, processing_dir='/media/sf_tmp/processing_lists/'):
                     # Only save directories if it contains upwelling data.
                     if [f for f in files if upPattern.match(f) or outPattern.match(f)]:
                         savefile.write(root + '\n')
-
-
-def process_years(years, processing_dir='/media/sf_tmp/processing_lists/', process_errors=False):
-    out_dir = '/media/sf_tmp/restruct2/'
-    if not os.path.exists(processing_dir):
-        raise RuntimeError('Processing directory {0} not found!'.format(processing_dir))
-    if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
-
-    logging.basicConfig(filename=os.path.join(out_dir,'app_log.txt'),
-                        format='%(levelname)s: %(message)s',level=logging.DEBUG)
-    logging.basicConfig(filename=os.path.join(out_dir,'error_log.txt'),
-                        format='%(levelname)s: %(message)s',level=logging.ERROR)
-
-    for year in years:
-        year = str(year)
-        logging.info('Processing year {0}. Started {1}'.format(year, time.strftime('%d/%m/%Y at %H:%M:%S')))
-
-        if process_errors:
-            master_list_file = os.path.join(processing_dir, year, 'error_list.txt')
-        else:
-            master_list_file = os.path.join(processing_dir, year, 'master_list.txt')
-        if not os.path.exists(master_list_file):
-            warnings.warn('A filepaths file was not found for {0}'.format(year))
-            continue
-        with open(master_list_file, 'r') as datadirs_file:
-            # Process each dir for that year.
-            data_dirs = datadirs_file.readlines()
-
-        err_list = []  # maintain a list of directories that failed processing.
-        for data_dir in data_dirs:
-            data_dir = data_dir.strip('\n')
-            # Now process the data
-            try:
-                cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict, standard_project_names = process_upwelling(
-                    data_dir, out_dir)
-                process_otherfiles(data_dir, cal_meta, loc_meta)
-                if cal_idxs is None:
-                    print('Problem with {0} !'.format(data_dir))
-                else:
-                    process_downwelling(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict,
-                                        standard_project_names)
-                    process_reflectance(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_dict,
-                                        standard_project_names)
-
-                # Save completed files to a 'completed files list'
-                with open(os.path.join(processing_dir, year, 'completed.txt'), 'a') as completed_file:
-                    completed_file.write(data_dir + '\n')
-
-            except Exception, e:
-                # Log that the error occured
-                problem_str = 'PROBLEM PROCESSING {0}! Exception:\n {1} \n'\
-                              '-------------------------------------------------------------'\
-                              '\n'.format(data_dir, traceback.format_exc())
-
-                logging.error(problem_str)
-                warnings.warn(problem_str)
-
-                err_list.append(data_dir)
-
-                # Cleanup
-                # Remove all the location directories
-                for loc in loc_meta.keys():
-                    del_out_dir = loc_meta[loc]['out_dir']
-                    print('Cleaning up {0}'.format(del_out_dir))
-                    shutil.rmtree(del_out_dir)
-
-                # Remove the cal dir
-                del_cal_dir = cal_meta['out_dir']
-                shutil.rmtree(del_cal_dir)
-
-                # Now back up to the 'base' directory.
-                cal_dir_list = split_path(del_cal_dir)
-                del_dir = '/'
-                for i in range(len(cal_dir_list) - 1):
-                    del_dir = os.path.join(del_dir, cal_dir_list[i])
-
-                # If there's nothing left in the 'base' directory, remove it.
-                if os.path.isdir(del_dir) and not os.listdir(del_dir):
-                    shutil.rmtree(del_dir)
-
-        # Save the offending directory to a file
-        if err_list:
-            # We'll re-write this file each time, to ensure that it contains the most recent errors.
-            with open(os.path.join(processing_dir, year, 'error_list.txt'), 'w') as error_file:
-                error_file.write(data_dir + '\n')
-
-    logging.shutdown()
