@@ -22,7 +22,7 @@ import time
 import copy
 
 
-def process_upwelling(data_dir, out_dir, only_csp=True):
+def process_upwelling(data_dir, out_dir):
     """
     Processes the upwelling file(s) in a CDAP data directory.
 
@@ -150,15 +150,7 @@ def process_upwelling(data_dir, out_dir, only_csp=True):
             county = 'Unknown'
 
         # Once we have the location, we can standardize this scan's project name.
-        s_project_name = standardize_project_name(project, location)
-        if s_project_name is None:
-            if only_csp:
-                continue
-            else:
-                col_data[project_idx] = project
-        else:
-            col_data[project_idx] = s_project_name
-
+        col_data[project_idx] = standardize_project_name(project, location)
         standard_project_names.append(col_data[project_idx])
 
         # Figure out if this is a cal scan
