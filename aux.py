@@ -17,7 +17,7 @@ def create_aux_file(data_dict, key_dict, other_keys, dataset_id, path):
     # Define what to include in Aux.
     elements = ['Project', 'Replication', 'X', 'Y', 'Scan Number', 'Solar Azimuth', 'Solar Elevation', 'Solar Zenith',
                 'GPS', 'Altitude', 'Latitude', 'Longitude', 'Battery Voltage', 'Canopy Temperature', 'Temperature 1',
-                'Temperature 2', 'Pyronometer', 'Quantum Sensor']
+                'Wheel Temperature', 'Temperature 2', 'Pyranometer', 'Quantum Sensor']
 
     # Open the csv file and write the results
     with open(path, 'w') as f:
@@ -191,28 +191,41 @@ def read_xls_log(path):
 
     # Create the header obj
     header = []
+    header_flag = True
 
     cur_loc = None
     cur_plot = None
 
     # Iterate over the rows
     for row_idx in range(sheet.nrows):
-        row = sheet.row(row_idx)
-        row = [element.value for element in row]
+        sheet_row = sheet.row(row_idx)
+        row = []
+        for element in sheet_row:
+            if element.ctype == 3:
+                # It is an excel date. 
+                xl_date = xlrd.xldate.xldate_as_datetime(element.value, book.datemode)
+                xl_date = xl_date.strftime('%m%d%Y')
+                row.append(xl_date)
+            else:
+                row.append(element.value)
 
         if all(element == '' for element in row):
             continue
 
-        if str(row[0]) == 'Plot' or str(row[0]).startswith('Data collection log'):
-            header.append(row)
+        if not header_flag and str(row[0]).startswith('Scan'):
+            continue
 
         if str(row[0]).startswith('CSP'):
             # Indicates start of a location.
+            if header_flag:
+                header_flag = False
             data[row[0]] = [row, {}]
             cur_loc = row[0]
             continue
 
         if str(row[0]).startswith('Plot') and len(str(row[0])) > 4:
+            if header_flag:
+                header_flag = False
             # Determine what plot number it is and make naming consistent.
             plot_nums = filter_floats(row[0])
             if len(plot_nums) != 0:
@@ -227,6 +240,10 @@ def read_xls_log(path):
                 data[cur_loc][1][cur_plot] = [row]
             else:
                 data[cur_loc][1][cur_plot].append(row)
+
+        #if str(row[0]) == 'Plot' or str(row[0]).startswith('Data collection log'):
+        if header_flag:
+            header.append(row)
 
     return header, data
 
@@ -289,6 +306,7 @@ def process_xls_logfile(logdata, cal_meta, loc_meta):
                             int(row[1])
                             scan_num_idx = 1
                         except ValueError:
+                            import pdb;pdb.set_trace()
                             raise RuntimeError('ENCOUNTERED UNEXPECTED XLS LOG FORMATTING IN {0}'
                                                .format(meta_dict['Legacy Path']))
 
