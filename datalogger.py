@@ -1,5 +1,6 @@
 """Functions related to dealing w/ datalogger entries"""
 from utility import mean
+import warnings
 
 
 def split_datalogger_entry(datalogger_str):
@@ -56,6 +57,7 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
     Returns:
         data_dict, key_dict - Modified dictionaries.
     """
+
     # First, clean up any previous entries to datalogger_to_dict.
     dl_entries = ['Wheel Temperature', 'Canopy Temperature', 'Pyranometer',
                   'Quantum Sensor']
@@ -73,7 +75,7 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
     # If no entries were found, just remove the datalogger field alltogether and move on
     if num_entries is None:
         del data_dict[key_dict['Data Logger']]
-        return data_dict
+        return data_dict, key_dict
 
     # Split out all of the data from the datalogger strings. Each var is it's own list.
     data_entries = unzip_dlogger_entries(split_datalogger_entries(data_datalogger), num_entries=num_entries)
@@ -98,6 +100,11 @@ def datalogger_to_dict(data_dict, key_dict, data_dir):
     elif num_entries == 6 and all(float(val) < 0 for val in data_entries[5]):  # Last value is -99999
         # battery volt, temp1, temp2, Pyranometer, Quantum Sensor, None.
         entry_names.extend(['Pyranometer', 'Quantum Sensor', None])
+
+    elif num_entries == 6 and not all(float(val) < 0 for val in data_entries[5]):  # Last value is -99999
+        entry_names.extend(['Pyranometer', 'Quantum Sensor', None])
+        warnings.warn('DATALOGGER DATA FOUND BUT NOT RECOGNIZED. DATA MAY HAVE\
+                       BEEN LOST.')
 
     elif num_entries == 3:
         # Just battery voltage, temp1, temp2.
