@@ -194,8 +194,9 @@ def process_upwelling(data_dir, out_dir):
     cal_dict, cal_scans, _ = data2dict(cal_data)
 
     # Modify the datalogger entry: split datalogger values into respective fields
-    if cal_dict[key_dict['Data Logger']]:
-        cal_dict, key_dict = datalogger_to_dict(cal_dict, key_dict, data_dir)
+    if not cal_dict[key_dict['Date']][0].startswith('2001'):
+        if cal_dict[key_dict['Data Logger']]:
+            cal_dict, key_dict = datalogger_to_dict(cal_dict, key_dict, data_dir)
 
     # Create the calibration metadata dict
     cal_meta = create_metadata_dict(cal_dict, key_dict, data_dir, cal=True)
@@ -246,8 +247,9 @@ def process_upwelling(data_dir, out_dir):
         data_dict, data_scans, _ = data2dict(data)
 
         # Modify the datalogger entry: split datalogger values into respective fields
-        if data_dict[key_dict['Data Logger']]:
-            data_dict, key_dict = datalogger_to_dict(data_dict, key_dict, data_dir)
+        if not data_dict[key_dict['Date']][0].startswith('2001'):
+            if data_dict[key_dict['Data Logger']]:
+                data_dict, key_dict = datalogger_to_dict(data_dict, key_dict, data_dir)
 
         # Construct the metadata for this location.
         loc_meta[loc] = create_metadata_dict(data_dict, key_dict, data_dir)
@@ -480,7 +482,7 @@ def process_reflectance(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_di
 
             # Create the data dicts
             data_dict, data_scans, _ = data2dict(scan_data)
-
+            
             # Save the scandata files
             loc_dir = loc_meta[loc]['out_dir']
             dataset_id = loc_meta[loc]['Dataset ID']
@@ -488,52 +490,3 @@ def process_reflectance(data_dir, cal_idxs, loc_idxs, loc_meta, cal_meta, key_di
             if data_dict[key_dict['Replication']]:
                 create_scan_file(data_dict, key_dict, data_scans, dataset_id,
                                  os.path.join(loc_dir, 'Reflectance_data.csv'))
-
-
-
-def find_datafiles(years, processing_dir='/media/sf_tmp/processing_lists/'):
-    """
-    Need to just find and save filenames/paths of files we want.
-
-    """
-    # Define some ~constants~ (server changes may result in 'outdated' constants.
-    base_dir = '/media/sf_Field-Data/'
-    if not os.path.exists(base_dir):
-        raise RuntimeError('Base data directory not found!')
-
-    # First make sure the save directory exists and create it if not.
-    if not os.path.exists(processing_dir):
-        os.mkdir(processing_dir)
-
-    # Define some regex
-    upPattern = re.compile('.*Upwelling.*\.txt')
-    outPattern = re.compile('.*Outgoing.*\.txt')
-
-    # We'll process each year individually since some years represent significant breaks in file structure
-    for year in years:
-        year = str(year)
-
-        # Ensure the year exists in the base directory
-        search_dir = os.path.join(base_dir, year)
-        if not os.path.exists(search_dir):
-            warnings.warn('A data directory for year {0} was not found!'.format(year))
-            continue  # Move on to the next year if a directory doesn't exist for this one
-
-        # Construct the path to the output master list.
-        processing_year_dir = os.path.join(processing_dir, year)
-        if not os.path.exists(processing_year_dir):
-            os.mkdir(processing_year_dir)
-        filename = os.path.join(processing_year_dir, 'master_list.txt')
-
-        # We are going to create or overwrite the <processing_dir>/year/master_list.txt
-        with open(filename, 'w') as savefile:
-            for root, dirs, files in os.walk(search_dir):
-                # Ensure it's a CSP related directory, that it's not a renamed one, or a duplicate dir.
-                # (below basically just ensures the exclusion of directories we do not want to process.)
-                if '/'+str(year)+'/'+str(year) + '/' not in root and 'renamed' not in root.lower() and\
-                'combined' not in root.lower() and 'lab' not in root.lower() and 'test' not in root.lower()\
-                    and 'smallplots' not in root.lower() and 'bad' not in root.lower() and 'old process' not in root.lower()\
-                        and ('csp' in root.lower() or 'mead' in root.lower() or 'BLMV' in root):
-                    # Only save directories if it contains upwelling data.
-                    if [f for f in files if upPattern.match(f) or outPattern.match(f)]:
-                        savefile.write(root + '\n')
