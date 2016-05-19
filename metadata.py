@@ -41,7 +41,8 @@ def create_metadata_file(metadata,  out_path):
                         # (target, cal panel). Join them, separated by a ';'
                         element.insert(1, ';'.join(value))
                     else:
-                        element.insert(1, value[0])
+                        if len(value) >= 1:
+                            element.insert(1, value[0])
                 else:
                     # Just insert the value into the element list.
                     element.insert(1, value)
@@ -204,3 +205,4 @@ def read_metadata(path):
                 pass
 
     return meta_dict
+
