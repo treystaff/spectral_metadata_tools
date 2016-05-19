@@ -127,7 +127,13 @@ def process_otherfiles(in_dir, cal_meta, loc_meta):
         else:
             logdata = read_log(os.path.join(in_dir, logfile[0]))
     elif len(logfile) > 1:
-        raise RuntimeError('MULTIPLE LOGFILES FOUND IN {0}'.format(in_dir))
+        if '20030721_log.xls' in logfile and '20030724_log.xls' in logfile:
+            # For some reason, 0721 is included in the folder with 0724...
+            logdata = read_xls_log(os.path.join(in_dir, '20030724_log.xls'))
+            process_xls_logfile(logdata, cal_meta, loc_meta)
+            logdata = None
+        else:
+            raise RuntimeError('MULTIPLE LOGFILES FOUND IN {0}'.format(in_dir))
     elif len(logfile) == 0:
         warnstr = 'NO LOGFILE FOUND IN {0}'.format(in_dir)
         warnings.warn(warnstr)
