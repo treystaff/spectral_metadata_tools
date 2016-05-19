@@ -397,8 +397,14 @@ def reps_to_targets(reps):
             targets.append('Water')
         elif rep in {'soil', 'baresoil'}:
             targets.append('Soil')
+            
+    if len(targets) == 0:
+        targets = list(reps)
+        warnings.warn('No valid target was found. Using {0} instead.'.format(reps))
+    else:
+        targets = list(set(targets))
 
-    return list(set(targets))
+    return targets
 
 
 def filter_lists(list1, list2, val):
