@@ -22,6 +22,9 @@ Country, NULL, The country within which the data were collected.,Country
 State, NULL, The state within which the data were collected.,State
 County, NULL, The county within which the data were collected.,County
 Target, NULL, The target of the data collection,Target
+Crop Name, NULL, The name of the crop planted at the target location.,Target
+Crop Cultivar, NULL, The crop cultivar at the target location.,Target
+Planting Date, NULL, The date the crop cultivar was planted in YYYYMMDD format.,Target
 Acquisition Software, NULL, The name of the software used to collect the data.,Acquisition Software
 Software Version, NULL, The version of the acquisition software used to collect the data.,Software Version
 Min Solar Elevation, Degrees, The minimum solar elevation observed during data collection,Minimum Solar Elevation
